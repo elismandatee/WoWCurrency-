@@ -1,0 +1,22 @@
+
+{
+  "name": "WoWCurrency Hub",
+  "short_name": "WoW",
+  "description": "Global Crypto-to-Fiat Bridge",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2A74B1",
+  "icons": [
+    {
+      "src": "https://vitejs.dev/logo-with-shadow.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://vitejs.dev/logo-with-shadow.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "name": "WoWCurrency Converter",
+  "description": "A sleek, modern fintech app to convert Pi and other cryptocurrencies to Naira and Dollars, featuring the WoWCurrency ecosystem and real-time OTP authentication.",
+  "requestFramePermissions": []
+}
