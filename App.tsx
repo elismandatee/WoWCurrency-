@@ -9,6 +9,7 @@ import ExchangeRateTicker from './components/ExchangeRateTicker';
 import NotificationToast from './components/NotificationToast';
 import AuthOverlay from './components/AuthOverlay';
 import LoginOverlay from './components/LoginOverlay';
+import SwitchAccountModal from './components/SwitchAccountModal';
 import { ALL_CURRENCIES, FROM_CURRENCIES, TO_CURRENCIES } from './constants';
 import { getAllExchangeRates, BatchRate, BatchRatesResponse } from './services/conversionService';
 import type { KycData, User, Transaction, AppNotification, NotificationType, TreasuryBalances, VirtualAccount, Region } from './types';
@@ -24,11 +25,13 @@ const NOTIFS_STORAGE_KEY = 'wow_notifications_db';
 
 const App: React.FC = () => {
   const [isKycModalOpen, setKycModalOpen] = useState(false);
+  const [isSwitchModalOpen, setIsSwitchModalOpen] = useState(false);
   const [isLocked, setIsLocked] = useState(true);
   const [isQuickLocked, setIsQuickLocked] = useState(false);
   const [smsQueue, setSmsQueue] = useState<{ id: string, message: string, phone: string } | null>(null);
   
   const [activeUserId, setActiveUserId] = useState<string | null>(null);
+  const [pendingSwitchUserId, setPendingSwitchUserId] = useState<string | null>(null);
   
   // Market Rates State for Global Sync
   const [marketData, setMarketData] = useState<BatchRatesResponse | null>(null);
@@ -241,6 +244,7 @@ const App: React.FC = () => {
     setActiveUserId(authenticatedUser.id);
     setIsLocked(false);
     setIsQuickLocked(false);
+    setPendingSwitchUserId(null);
     notify("Login Successful", `Welcome back, @${authenticatedUser.username}!`, "success");
     dispatchSms(`WoW SECURITY: New login detected on your account @${authenticatedUser.username}. If this wasn't you, lock your vault immediately.`);
   };
@@ -253,6 +257,17 @@ const App: React.FC = () => {
     } else {
         dispatchSms(`WoW ALERT: Your profile details have been updated and synced to the global ledger.`);
     }
+  };
+
+  const handleSwitchRequest = (userId: string) => {
+    setIsSwitchModalOpen(false);
+    setPendingSwitchUserId(userId);
+    setIsQuickLocked(true);
+  };
+
+  const handleAddAccount = () => {
+    setIsSwitchModalOpen(false);
+    handleLogout();
   };
 
   const addTransaction = (transaction: Omit<Transaction, 'id' | 'date'>) => {
@@ -603,11 +618,24 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 selection:bg-blue-100 selection:text-blue-900 overflow-x-hidden flex flex-col">
       <ErrorBoundary>
         {isLocked && <AuthOverlay users={users} onAuthSuccess={handleAuthSuccess} />}
-        {isQuickLocked && !isLocked && <LoginOverlay onUnlock={() => setIsQuickLocked(false)} />}
+        {isQuickLocked && !isLocked && (
+            <LoginOverlay 
+                onUnlock={() => {
+                    if (pendingSwitchUserId) {
+                        const targetUser = users.find(u => u.id === pendingSwitchUserId);
+                        if (targetUser) {
+                            handleAuthSuccess(targetUser);
+                        }
+                    }
+                    setIsQuickLocked(false);
+                }} 
+            />
+        )}
         
         <Header 
           onOpenKyc={() => setKycModalOpen(true)} 
           onLogout={handleLogout}
+          onSwitchAccount={() => setIsSwitchModalOpen(true)}
           kycStatus={activeUser?.kycStatus || 'unverified'} 
           user={activeUser || undefined}
           notifications={notificationHistory}
@@ -615,6 +643,16 @@ const App: React.FC = () => {
           onClearAll={clearNotificationHistory}
         />
         
+        {/* Switch Account Modal */}
+        <SwitchAccountModal 
+            isOpen={isSwitchModalOpen} 
+            onClose={() => setIsSwitchModalOpen(false)}
+            users={users}
+            activeUserId={activeUserId || ''}
+            onSwitchAccount={handleSwitchRequest}
+            onAddAccount={handleAddAccount}
+        />
+
         {/* Mock SMS/Push Alert Gateway */}
         {smsQueue && (
           <div 

@@ -4,10 +4,12 @@ import type { KycStatus, User, AppNotification } from '../types';
 import Logo from './Logo';
 import LogoutIcon from './icons/LogoutIcon';
 import BellIcon from './icons/BellIcon';
+import ArrowsRightLeftIcon from './icons/ArrowsRightLeftIcon';
 
 interface HeaderProps {
     onOpenKyc: () => void;
     onLogout: () => void;
+    onSwitchAccount: () => void;
     kycStatus: KycStatus;
     user?: User;
     notifications: AppNotification[];
@@ -45,7 +47,7 @@ const KycStatusIndicator: React.FC<{ status: KycStatus }> = ({ status }) => {
     );
 };
 
-const Header: React.FC<HeaderProps> = ({ onOpenKyc, onLogout, kycStatus, user, notifications, onMarkAsRead, onClearAll }) => {
+const Header: React.FC<HeaderProps> = ({ onOpenKyc, onLogout, onSwitchAccount, kycStatus, user, notifications, onMarkAsRead, onClearAll }) => {
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -72,7 +74,7 @@ const Header: React.FC<HeaderProps> = ({ onOpenKyc, onLogout, kycStatus, user, n
       <div className="max-w-6xl mx-auto p-4 flex justify-between items-center relative">
         <Logo className="h-10" />
         
-        <div className="flex items-center gap-2 md:gap-4">
+        <div className="flex items-center gap-1.5 md:gap-3">
           <div className="relative" ref={notifRef}>
             <button 
                 onClick={handleOpenNotifs}
@@ -121,6 +123,14 @@ const Header: React.FC<HeaderProps> = ({ onOpenKyc, onLogout, kycStatus, user, n
                 </div>
             )}
           </div>
+
+          <button 
+            onClick={onSwitchAccount}
+            title="Switch Account"
+            className="p-2.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-full transition-all active:scale-95"
+          >
+            <ArrowsRightLeftIcon className="w-6 h-6" />
+          </button>
 
           <div className="h-6 w-px bg-gray-100" />
 
