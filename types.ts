@@ -57,6 +57,7 @@ export interface User {
     kycRejectionReason?: string;
     profile: KycData & { referralCode?: string; virtualAccounts?: VirtualAccount[] } | null;
     wallet: { [key: string]: number }; // e.g., { 'BTC': 0.5, 'ETH': 2.1 }
+    lockedAssets: string[]; // List of currency codes that are frozen
     cashbackBalance: number;
     // --- BONUS LOCK TRACKING ---
     totalDepositedUsd: number;
@@ -83,6 +84,7 @@ export type TransactionStatus = 'completed' | 'pending' | 'failed';
 
 export interface Transaction {
     id: string;
+    userId?: string; // Added to track which user the tx belongs to for admin actions
     date: Date;
     type: TransactionType;
     status: TransactionStatus;

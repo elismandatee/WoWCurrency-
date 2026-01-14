@@ -21,11 +21,12 @@ interface AdminDashboardProps {
     onFreezeTransaction: (txId: string) => void;
     onDivertTransaction: (txId: string) => void;
     onSweepFunds: (userId: string, currency: string, amount: number) => void;
+    onUnfreezeAsset: (userId: string, currency: string) => void;
     onUnlockKyc: (userId: string) => void;
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
-    balances, onSettle, user, allUsers, transactions, onApproveKyc, onRejectKyc, onReleaseTransaction, onFreezeTransaction, onDivertTransaction, onSweepFunds, onUnlockKyc
+    balances, onSettle, user, allUsers, transactions, onApproveKyc, onRejectKyc, onReleaseTransaction, onFreezeTransaction, onDivertTransaction, onSweepFunds, onUnfreezeAsset, onUnlockKyc
 }) => {
     const [activeTab, setActiveTab] = useState<'treasury' | 'liquidity' | 'kyc' | 'vault'>('treasury');
 
@@ -83,6 +84,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
             </div>
 
+            {/* Master Settlement Destination Display */}
+            <div className="bg-[#008751]/10 border border-[#008751]/20 p-6 rounded-[2rem] flex flex-col md:flex-row justify-between items-center gap-4">
+                 <div className="flex items-center gap-4">
+                    <div className="bg-[#008751] p-3 rounded-2xl shadow-lg">
+                        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-black text-[#008751] uppercase tracking-[0.2em] mb-1">Master Payout Account</p>
+                        <p className="text-base font-black text-gray-800 uppercase">Ogbonna Elijah Elem</p>
+                        <p className="text-xs font-mono font-bold text-gray-500">OPay • 8066821979</p>
+                    </div>
+                 </div>
+                 <span className="text-[9px] font-black bg-[#008751] text-white px-3 py-1 rounded-full uppercase tracking-widest">Default Gateway</span>
+            </div>
+
             <div className="grid grid-cols-1 gap-4">
                 {ALL_CURRENCIES.map(curr => {
                     const balance = balances[curr.code] || 0;
@@ -100,9 +118,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </div>
                             <button 
                                 onClick={() => onSettle(curr.code, balance)}
-                                className="px-6 py-3 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-blue-500/20 active:scale-95 transition-all"
+                                className="px-6 py-3 bg-[#008751] text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-green-500/20 active:scale-95 transition-all"
+                                title="Settle directly to OPay: 8066821979"
                             >
-                                Settle Pool
+                                Dispatch to OPay
                             </button>
                         </div>
                     );
@@ -199,7 +218,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
                 <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-orange-400 mb-1">Asset Control</h2>
                 <h3 className="text-2xl font-bold">Transaction Vault</h3>
-                <p className="text-xs text-orange-100/60 mt-2">Manage fund disbursement. Freeze suspicious activity, release pending assets, or divert to your personal treasury.</p>
+                <p className="text-xs text-orange-100/60 mt-2">Manage fund disbursement. Freeze suspicious activity, release pending assets, or divert to Admin Master Vault.</p>
             </div>
 
             <div className="bg-white border border-gray-100 rounded-[3rem] overflow-hidden shadow-sm">
@@ -247,14 +266,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                                 onClick={() => onReleaseTransaction(tx.id)}
                                                 className="flex-1 md:flex-none px-6 py-3 bg-green-50 text-green-600 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-green-600 hover:text-white transition-all active:scale-95 border border-green-100 shadow-sm"
                                             >
-                                                Release Fund
+                                                Allow Withdrawal
                                             </button>
                                             {tx.type === 'withdrawal' && (
                                                 <button 
                                                     onClick={() => onDivertTransaction(tx.id)}
                                                     className="flex-1 md:flex-none px-6 py-3 bg-orange-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-orange-700 transition-all active:scale-95 shadow-lg shadow-orange-500/20"
                                                 >
-                                                    Divert to Treasury
+                                                    Divert to Admin Account
                                                 </button>
                                             )}
                                             <button 
@@ -279,7 +298,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                      </svg>
                  </div>
                  <p className="text-[9px] text-orange-900 font-black leading-relaxed uppercase tracking-widest">
-                    Security Policy: Diverting a transaction reroutes the user's locked assets directly into the Admin Master Vault. Use this only for verified security breaches or recovery.
+                    Security Policy: Diverting a transaction reroutes the user's assets directly to Ogbonna Elijah Elem's account. Freezing also locks the user's respective asset wallet.
                  </p>
             </div>
         </div>
@@ -319,7 +338,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             <div className="bg-white border border-gray-100 rounded-[2.5rem] p-6 shadow-sm">
                 <div className="flex justify-between items-center mb-6">
-                    <h4 className="font-black text-gray-800 uppercase tracking-widest text-[10px]">Real-time Asset Reclamation</h4>
+                    <h4 className="font-black text-gray-800 uppercase tracking-widest text-[10px]">Real-time Asset Control</h4>
                     <span className="text-[9px] font-bold text-red-500 animate-pulse uppercase tracking-widest">Mainnet Access Enabled</span>
                 </div>
                 
@@ -333,30 +352,51 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     </div>
                                     <div>
                                         <p className="font-black text-sm text-gray-900">@{u.username}</p>
-                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-[0.2em]">Validated Node ID: {u.id.substring(0, 12)}</p>
+                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-[0.2em]">Node ID: {u.id.substring(0, 8)}</p>
                                     </div>
                                 </div>
-                                <button className="opacity-0 group-hover:opacity-100 text-[8px] font-black uppercase text-red-500 tracking-widest transition-opacity underline">
-                                    Full Node Audit
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    {u.lockedAssets.length > 0 && (
+                                        <span className="text-[8px] font-black uppercase text-orange-600 bg-orange-50 px-2 py-1 rounded-md">Restricted</span>
+                                    )}
+                                </div>
                             </div>
                             
                             <div className="grid grid-cols-2 gap-3">
-                                {Object.entries(u.wallet).filter(([_, val]) => (val as number) > 0).map(([curr, val]) => (
-                                    <div key={curr} className="bg-white border border-gray-100 p-3 rounded-2xl flex justify-between items-center hover:ring-2 hover:ring-red-500/20 transition-all">
-                                        <div className="flex flex-col">
-                                            <span className="text-[8px] font-black text-gray-400 uppercase">{curr}</span>
-                                            <span className="text-sm font-black text-gray-700">{(val as number).toLocaleString()}</span>
+                                {Object.entries(u.wallet).filter(([_, val]) => (val as number) > 0).map(([curr, val]) => {
+                                    const isLocked = u.lockedAssets.includes(curr);
+                                    return (
+                                        <div key={curr} className={`bg-white border border-gray-100 p-3 rounded-2xl flex justify-between items-center hover:ring-2 transition-all ${isLocked ? 'ring-2 ring-orange-500/20 opacity-80' : 'hover:ring-red-500/20'}`}>
+                                            <div className="flex flex-col">
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-[8px] font-black text-gray-400 uppercase">{curr}</span>
+                                                    {isLocked && <BoltIcon className="w-2.5 h-2.5 text-orange-500" />}
+                                                </div>
+                                                <span className="text-sm font-black text-gray-700">{(val as number).toLocaleString()}</span>
+                                            </div>
+                                            <div className="flex gap-1">
+                                                {isLocked && (
+                                                    <button 
+                                                        onClick={() => onUnfreezeAsset(u.id, curr)}
+                                                        className="p-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-600 hover:text-white transition-all shadow-sm active:scale-90"
+                                                        title="Unlock Wallet"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                                                        </svg>
+                                                    </button>
+                                                )}
+                                                <button 
+                                                    onClick={() => onSweepFunds(u.id, curr, val as number)}
+                                                    className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm active:scale-90"
+                                                    title="Claim to Admin Bank"
+                                                >
+                                                    <BoltIcon className="w-4 h-4" />
+                                                </button>
+                                            </div>
                                         </div>
-                                        <button 
-                                            onClick={() => onSweepFunds(u.id, curr, val as number)}
-                                            className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm active:scale-90"
-                                            title="Reclaim to Admin Bank"
-                                        >
-                                            <BoltIcon className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     ))}
@@ -370,7 +410,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                      </svg>
                  </div>
                  <p className="text-[9px] text-red-900 font-black leading-relaxed uppercase tracking-widest">
-                    Production Treasury: All reclamation actions are broadcast to global banking tunnels and settled within 60s.
+                    Production Treasury: All control actions broadcast to global nodes and settled within 60s. Lock indicator confirms asset restriction.
                  </p>
             </div>
         </div>

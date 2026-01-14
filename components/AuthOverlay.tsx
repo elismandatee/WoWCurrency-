@@ -149,6 +149,8 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ users, onAuthSuccess }) => {
           kycStatus: 'unverified',
           profile: null,
           wallet: { 'PI': 10, 'BTC': 0, 'ETH': 0, 'USDT': 0, 'NGN': 0, 'USD': 0 },
+          // Fix: Added missing lockedAssets property to satisfy User interface
+          lockedAssets: [],
           cashbackBalance: 0,
           totalDepositedUsd: 0,
           bonusPiAmount: 10,

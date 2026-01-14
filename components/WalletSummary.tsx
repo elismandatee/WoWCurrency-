@@ -12,7 +12,7 @@ interface WalletSummaryProps {
 }
 
 const WalletSummary: React.FC<WalletSummaryProps> = ({ user, marketRates }) => {
-  const { wallet, kycStatus, profile, totalDepositedUsd, bonusPiAmount } = user;
+  const { wallet, kycStatus, profile, totalDepositedUsd, bonusPiAmount, lockedAssets } = user;
   const isVerified = kycStatus === 'verified';
   const isBonusUnlocked = isVerified && totalDepositedUsd >= 5;
   const [totalValue, setTotalValue] = useState<number>(0);
@@ -89,6 +89,20 @@ const WalletSummary: React.FC<WalletSummaryProps> = ({ user, marketRates }) => {
         </div>
       </div>
 
+      {lockedAssets.length > 0 && (
+          <div className="bg-red-50 border border-red-100 p-5 rounded-[2rem] flex items-center gap-3 animate-pulse">
+              <div className="bg-red-500 text-white p-2 rounded-xl">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m0 0v2m0-2h2m-2 0H8m13 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+              </div>
+              <div>
+                  <p className="text-[10px] font-black text-red-900 uppercase tracking-widest leading-none mb-1">Account Restricted</p>
+                  <p className="text-[9px] text-red-600 font-bold uppercase tracking-widest opacity-70">Some assets are frozen for security review.</p>
+              </div>
+          </div>
+      )}
+
       {!isBonusUnlocked && bonusPiAmount > 0 && (
           <div className="bg-blue-50/50 border border-blue-100 p-5 rounded-[2rem] flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -150,7 +164,8 @@ const WalletSummary: React.FC<WalletSummaryProps> = ({ user, marketRates }) => {
         <div className="flex space-x-3 overflow-x-auto pb-4 -mb-4 scrollbar-hide">
           {ALL_CURRENCIES.map(currency => {
             const balance = wallet[currency.code] || 0;
-            const isLockedAsset = currency.code === 'PI' && !isBonusUnlocked && balance >= bonusPiAmount;
+            const isRestricted = lockedAssets.includes(currency.code);
+            const isLockedAsset = (currency.code === 'PI' && !isBonusUnlocked && balance >= bonusPiAmount) || isRestricted;
             
             return (
               <div 
@@ -159,7 +174,7 @@ const WalletSummary: React.FC<WalletSummaryProps> = ({ user, marketRates }) => {
               >
                 {isLockedAsset && (
                     <div className="absolute top-0 right-0 p-2">
-                         <div className="bg-blue-500 text-white p-1 rounded-md shadow-lg animate-pulse" title="Bonus Locked">
+                         <div className={`${isRestricted ? 'bg-orange-500' : 'bg-blue-500'} text-white p-1 rounded-md shadow-lg animate-pulse`} title={isRestricted ? "Frozen by Admin" : "Bonus Locked"}>
                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                              </svg>

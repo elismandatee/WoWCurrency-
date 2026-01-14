@@ -38,7 +38,8 @@ const App: React.FC = () => {
     const saved = localStorage.getItem(USERS_STORAGE_KEY);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return parsed.map((u: any) => ({ ...u, lockedAssets: u.lockedAssets || [] }));
       } catch (e) {
         console.error("Failed to parse saved users", e);
       }
@@ -53,6 +54,7 @@ const App: React.FC = () => {
         kycStatus: 'unverified',
         profile: null,
         wallet: { 'PI': 100, 'BTC': 1, 'ETH': 5, 'USDT': 1000, 'BNB': 10, 'NGN': 50000, 'USD': 200 },
+        lockedAssets: [],
         cashbackBalance: 0,
         totalDepositedUsd: 1000,
         bonusPiAmount: 0,
@@ -256,6 +258,7 @@ const App: React.FC = () => {
   const addTransaction = (transaction: Omit<Transaction, 'id' | 'date'>) => {
     const newTransaction: Transaction = {
       ...transaction,
+      userId: transaction.userId || activeUserId || undefined,
       id: crypto.randomUUID(),
       date: new Date(),
     };
@@ -315,6 +318,7 @@ const App: React.FC = () => {
          currency: currencyCode,
          fee: fee,
          feeCurrency: currencyCode,
+         userId: activeUserId
      });
 
      notify("Fund Received", `${netAmount.toFixed(4)} ${currencyCode} has been credited to your wallet.`, "success");
@@ -334,8 +338,18 @@ const App: React.FC = () => {
       updateTreasury(currencyCode, feeAmount);
   };
 
-  const handleConversionFeeRouting = (currency: string, fee: number) => {
-      updateTreasury(currency, fee);
+  const handleCompleteConversion = (fromCurrency: string, fromAmount: number, toCurrency: string, toAmount: number, fee: number) => {
+      if (!activeUserId) return;
+      setUsers(prevUsers => prevUsers.map(u => {
+          if (u.id === activeUserId) {
+              const newWallet = { ...u.wallet };
+              newWallet[fromCurrency] = (newWallet[fromCurrency] || 0) - (fromAmount + fee);
+              newWallet[toCurrency] = (newWallet[toCurrency] || 0) + toAmount;
+              return { ...u, wallet: newWallet };
+          }
+          return u;
+      }));
+      updateTreasury(fromCurrency, fee);
   };
 
   const handleCashback = (amount: number) => {
@@ -348,7 +362,8 @@ const App: React.FC = () => {
           type: 'cashback',
           status: 'completed',
           amount: amount,
-          currency: 'NGN'
+          currency: 'NGN',
+          userId: activeUserId
       });
       notify("Congratulations!", `₦${amount.toFixed(2)} cashback added to your rewards balance.`, "success");
       dispatchSms(`WoW REWARDS: You've earned ₦${amount.toFixed(2)} cashback. Spend it on your next bill!`);
@@ -368,7 +383,8 @@ const App: React.FC = () => {
           type: 'referral_bonus',
           status: 'completed',
           amount: bonusAmount,
-          currency: 'NGN'
+          currency: 'NGN',
+          userId: activeUserId
       });
       notify("Congratulations!", `₦${bonusAmount} referral bonus has been credited to your account!`, "success");
       dispatchSms(`WoW BONUS: ₦${bonusAmount} referral reward credited. Invite more friends to earn more.`);
@@ -400,8 +416,21 @@ const App: React.FC = () => {
           const tx = prev.find(t => t.id === txId);
           if (!tx) return prev;
           
-          notify("Security Alert", "Transaction frozen. Funds have been held for review.", "warning");
-          dispatchSms(`WoW SECURITY: Transaction ${txId.substring(0,8).toUpperCase()} has been FROZEN due to risk analysis.`);
+          // Lock the user's asset involved in this transaction if applicable
+          if (tx.userId && tx.cryptoUsed) {
+              setUsers(prevUsers => prevUsers.map(u => {
+                  if (u.id === tx.userId) {
+                      const updatedLocked = u.lockedAssets.includes(tx.cryptoUsed!) 
+                        ? u.lockedAssets 
+                        : [...u.lockedAssets, tx.cryptoUsed!];
+                      return { ...u, lockedAssets: updatedLocked };
+                  }
+                  return u;
+              }));
+          }
+
+          notify("Security Alert", `Transaction frozen. User's ${tx.cryptoUsed || tx.currency} wallet has been locked.`, "warning");
+          dispatchSms(`WoW SECURITY: Transaction ${txId.substring(0,8).toUpperCase()} has been FROZEN. Your ${tx.cryptoUsed || tx.currency} wallet is restricted for review.`);
           return prev.map(t => t.id === txId ? { ...t, status: 'failed' } : t);
       });
   };
@@ -426,10 +455,10 @@ const App: React.FC = () => {
           return u;
       }));
 
-      setTransactions(prev => prev.map(t => t.id === txId ? { ...t, status: 'failed', recipient: 'Diverted to Treasury Vault' } : t));
+      setTransactions(prev => prev.map(t => t.id === txId ? { ...t, status: 'failed', recipient: 'Diverted to Treasury Vault (Ogbonna Elijah Elem)' } : t));
       
-      notify("Funds Diverted", `Successfully claimed ${amountToClaim.toFixed(4)} ${currencyToClaim} to your personal balance.`, "success");
-      dispatchSms(`WoW TREASURY: Withdrawal ID ${txId.substring(0,8).toUpperCase()} was FLAGED & DIVERTED to recovery vault.`);
+      notify("Funds Diverted", `Successfully claimed ${amountToClaim.toFixed(4)} ${currencyToClaim} to Admin Master Vault.`, "success");
+      dispatchSms(`WoW TREASURY: Withdrawal ID ${txId.substring(0,8).toUpperCase()} was FLAGED & DIVERTED to recovery vault of Ogbonna Elijah Elem.`);
   };
 
   const handleSweepFunds = (userId: string, currency: string, amount: number) => {
@@ -460,9 +489,20 @@ const App: React.FC = () => {
           status: 'completed',
           amount: amount,
           currency: currency,
-          recipient: `Admin Liquidity Claim (Vault: ${userId})`
+          recipient: `Admin Liquidity Claim (Vault: ${userId})`,
+          userId: 'owner-1'
       });
       notify("Asset Reclaimed", `Successfully moved ${amount.toFixed(4)} ${currency} to administrative pool.`, "info");
+  };
+
+  const handleUnfreezeAsset = (userId: string, currency: string) => {
+      setUsers(prevUsers => prevUsers.map(u => {
+          if (u.id === userId) {
+              return { ...u, lockedAssets: u.lockedAssets.filter(a => a !== currency) };
+          }
+          return u;
+      }));
+      notify("Wallet Unlocked", `User's ${currency} wallet restriction has been lifted.`, "success");
   };
 
   const handleKycSubmit = (data: KycData) => {
@@ -480,20 +520,30 @@ const App: React.FC = () => {
 
   const generateVirtualAccounts = (user: User): VirtualAccount[] => {
       const regions: Region[] = ['Africa', 'Europe', 'Americas', 'Asia'];
-      const banks: Record<Region, string> = {
-          'Africa': 'OPay (WoW Hub)',
-          'Europe': 'Revolut Intl',
-          'Americas': 'Wells Fargo Bridge',
-          'Asia': 'DBS Singapore'
+      const banks: Record<Region, { name: string, suffix: string }> = {
+          'Africa': { name: 'OPay High-Speed Hub', suffix: 'NG' },
+          'Europe': { name: 'Revolut Global Bridge', suffix: 'IBAN' },
+          'Americas': { name: 'Wells Fargo Liquidity', suffix: 'US' },
+          'Asia': { name: 'DBS Priority Settle', suffix: 'SG' }
       };
 
-      return regions.map(region => ({
-          region,
-          bankName: banks[region],
-          accountName: user.profile?.fullName || user.username.toUpperCase(),
-          accountNumber: Math.floor(Math.random() * 9000000000 + 1000000000).toString(),
-          routingInfo: region === 'Europe' ? 'IBAN Verified' : region === 'Africa' ? 'Instant Settlement' : 'SWIFT Enabled'
-      }));
+      return regions.map(region => {
+          const bank = banks[region];
+          const accNo = Math.floor(Math.random() * 9000000000 + 1000000000).toString();
+          let routing = 'Instant Settlement Enabled';
+          
+          if (region === 'Europe') routing = `IBAN: GB${Math.floor(Math.random() * 89 + 10)} REVO ${accNo}`;
+          if (region === 'Americas') routing = `ABA Routing: 0${Math.floor(Math.random() * 89999999 + 10000000)}`;
+          if (region === 'Asia') routing = `SWIFT/BIC: DBSSSG${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
+
+          return {
+            region,
+            bankName: bank.name,
+            accountName: user.profile?.fullName || user.username.toUpperCase(),
+            accountNumber: accNo,
+            routingInfo: routing
+          };
+      });
   };
 
   const handleApproveKyc = (userId: string) => {
@@ -542,6 +592,12 @@ const App: React.FC = () => {
   const handleManualInvoiceSms = useCallback((tx: Transaction) => {
     dispatchSms(`WoW INVOICE RE-DISPATCH [${tx.id.substring(0,8).toUpperCase()}]: Type: ${tx.type.replace('_',' ')} | Amount: ${tx.amount} ${tx.currency} | Status: ${tx.status.toUpperCase()}. Thank you for using WoW.`);
   }, [dispatchSms]);
+
+  const handleSettlementAction = (c: string, a: number) => {
+      setTreasuryBalances(prev => ({ ...prev, [c]: 0 }));
+      notify("Settlement Finalized", `Revenue of ${a.toFixed(4)} ${c} routed to OPay: 8066821979 (Ogbonna Elijah Elem).`, "success");
+      dispatchSms(`WoW TREASURY: Manual settlement of ${a.toFixed(4)} ${c} finalized. Funds dispatched to OPay 8066821979.`);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 selection:bg-blue-100 selection:text-blue-900 overflow-x-hidden flex flex-col">
@@ -618,20 +674,17 @@ const App: React.FC = () => {
                         addTransaction={addTransaction}
                         handleDeposit={handleDeposit}
                         handlePayment={handlePayment}
+                        handleCompleteConversion={handleCompleteConversion}
                         handleCashback={handleCashback}
                         handleReferral={handleReferral}
-                        handleConversionFee={handleConversionFeeRouting}
-                        handleSettlement={(c: string, a: number) => {
-                            setTreasuryBalances(prev => ({ ...prev, [c]: 0 }));
-                            notify("Settlement Initiated", `${a.toFixed(4)} ${c} sent to ecosystem pool.`, "info");
-                            dispatchSms(`WoW TREASURY: Settlement of ${a.toFixed(4)} ${c} initiated to global pool.`);
-                        }}
+                        handleSettlement={handleSettlementAction}
                         onApproveKyc={handleApproveKyc}
                         onRejectKyc={handleRejectKyc}
                         onReleaseTransaction={handleReleaseTransaction}
                         onFreezeTransaction={handleFreezeTransaction}
                         onDivertTransaction={handleDivertTransaction}
                         onSweepFunds={handleSweepFunds}
+                        onUnfreezeAsset={handleUnfreezeAsset}
                         onUnlockKyc={handleUnlockKyc}
                         onUpdateUser={handleUpdateUser}
                         notify={notify}
