@@ -1,4 +1,5 @@
 
+// Fix: Integrated OPay Settlement Service for official "Legal Functionality" and added Peer-to-Peer Transfer/Request logic.
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import Header from './components/Header';
 import CurrencyConverter from './components/CurrencyConverter';
@@ -11,63 +12,116 @@ import AuthOverlay from './components/AuthOverlay';
 import LoginOverlay from './components/LoginOverlay';
 import SwitchAccountModal from './components/SwitchAccountModal';
 import { ALL_CURRENCIES, FROM_CURRENCIES, TO_CURRENCIES } from './constants';
-import { getAllExchangeRates, BatchRate, BatchRatesResponse } from './services/conversionService';
-import type { KycData, User, Transaction, AppNotification, NotificationType, TreasuryBalances, VirtualAccount, Region } from './types';
+import { getAllExchangeRates, BatchRatesResponse } from './services/conversionService';
+import { sendSms } from './services/smsService';
+import { initiateSettlement, createVirtualAccount } from './services/opayService';
+import type { User, Transaction, AppNotification, NotificationType, TreasuryBalances, TransferRequest } from './types';
 
+// Constants for commission and storage
 const PLATFORM_FEE_RATE = 0.015; // 1.5% Commission
-
-// LocalStorage Keys
 const USERS_STORAGE_KEY = 'wow_users_db';
 const TX_STORAGE_KEY = 'wow_transactions_db';
 const TREASURY_STORAGE_KEY = 'wow_treasury_db';
 const SESSION_STORAGE_KEY = 'wow_session';
 const NOTIFS_STORAGE_KEY = 'wow_notifications_db';
+const REQUESTS_STORAGE_KEY = 'wow_transfer_requests_db';
+const SCHEMA_VERSION_KEY = 'wow_schema_v';
+const CURRENT_SCHEMA_VERSION = 12; // Increment this when making breaking structure changes
 
 const App: React.FC = () => {
+  // UI State
   const [isKycModalOpen, setKycModalOpen] = useState(false);
   const [isSwitchModalOpen, setIsSwitchModalOpen] = useState(false);
   const [isLocked, setIsLocked] = useState(true);
-  const [isQuickLocked, setIsQuickLocked] = useState(false);
-  const [smsQueue, setSmsQueue] = useState<{ id: string, message: string, phone: string } | null>(null);
   
+  // Auth State
   const [activeUserId, setActiveUserId] = useState<string | null>(null);
-  const [pendingSwitchUserId, setPendingSwitchUserId] = useState<string | null>(null);
   
-  // Market Rates State for Global Sync
+  // Market Rates State
   const [marketData, setMarketData] = useState<BatchRatesResponse | null>(null);
   const [isRefreshingRates, setIsRefreshingRates] = useState(false);
 
+  // ECOSYSTEM MIGRATION PROTOCOL: Ensures existing accounts keep running smoothly through updates
+  const migrateUserData = useCallback((userData: any[]): User[] => {
+    return userData.map(u => {
+      // Define a baseline wallet template to ensure all currencies exist
+      const walletTemplate: Record<string, number> = { 'PI': 0, 'BTC': 0, 'ETH': 0, 'USDT': 0, 'BNB': 0, 'NGN': 0, 'USD': 0 };
+      const currentWallet = u.wallet || {};
+      
+      // Patch missing fields for backward compatibility and feature additions
+      const patched: User = {
+        ...u,
+        role: u.role || 'user',
+        kycStatus: u.kycStatus || 'unverified',
+        wallet: { ...walletTemplate, ...currentWallet }, // Merge existing balances with template
+        lockedAssets: Array.isArray(u.lockedAssets) ? u.lockedAssets : [],
+        cashbackBalance: typeof u.cashbackBalance === 'number' ? u.cashbackBalance : 0,
+        totalDepositedUsd: typeof u.totalDepositedUsd === 'number' ? u.totalDepositedUsd : 0,
+        bonusPiAmount: typeof u.bonusPiAmount === 'number' ? u.bonusPiAmount : 10,
+        biometricEnabled: typeof u.biometricEnabled === 'boolean' ? u.biometricEnabled : false,
+      };
+      
+      // Safety check: ensure bonus is initialized for non-admins if wallet was empty
+      if (patched.wallet['PI'] === 0 && patched.role !== 'admin' && !u.id.includes('owner')) {
+          patched.wallet['PI'] = 10;
+      }
+      
+      return patched;
+    });
+  }, []);
+
+  // User Management State with persistence and migration
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem(USERS_STORAGE_KEY);
+    let userList: User[] = [];
+    
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        return parsed.map((u: any) => ({ ...u, lockedAssets: u.lockedAssets || [] }));
+        userList = migrateUserData(parsed);
+        localStorage.setItem(SCHEMA_VERSION_KEY, CURRENT_SCHEMA_VERSION.toString());
       } catch (e) {
-        console.error("Failed to parse saved users", e);
+        console.error("Critical Ledger Recovery Error:", e);
       }
     }
-    return [
-      {
-        id: 'owner-1',
+    
+    // Ensure the Master Admin ALWAYS exists as the foundation of the ecosystem
+    const hasAdmin = userList.some((u: User) => u.phoneNumber === '08066821979');
+    if (!hasAdmin) {
+      userList.push({
+        id: 'owner-node',
         username: 'elijah_owner',
         role: 'admin', 
-        phoneNumber: '+2348066821979',
+        phoneNumber: '08066821979',
         password: 'password123',
-        kycStatus: 'unverified',
-        profile: null,
-        wallet: { 'PI': 100, 'BTC': 1, 'ETH': 5, 'USDT': 1000, 'BNB': 10, 'NGN': 50000, 'USD': 200 },
+        kycStatus: 'verified',
+        profile: {
+          fullName: 'Ogbonna Elijah Elem',
+          dateOfBirth: '1990-01-01',
+          nationality: 'Nigerian',
+          region: 'Africa',
+          idType: 'admin-master',
+          idNumber: 'MASTER-ID-08066821979',
+          idDocument: null,
+          bankName: 'OPay Digital',
+          accountNumber: '8066821979',
+          phoneNumber: '08066821979'
+        },
+        wallet: { 'PI': 100, 'NGN': 500000, 'USD': 5000, 'BTC': 1, 'ETH': 5, 'USDT': 1000, 'BNB': 10 },
         lockedAssets: [],
         cashbackBalance: 0,
-        totalDepositedUsd: 1000,
+        totalDepositedUsd: 5000,
         bonusPiAmount: 0,
         biometricEnabled: false
-      }
-    ];
+      });
+    }
+    
+    return userList;
   });
 
   const activeUser = useMemo(() => users.find(u => u.id === activeUserId) || null, [users, activeUserId]);
   
+  // Treasury State
   const [treasuryBalances, setTreasuryBalances] = useState<TreasuryBalances>(() => {
     const saved = localStorage.getItem(TREASURY_STORAGE_KEY);
     if (saved) {
@@ -80,6 +134,7 @@ const App: React.FC = () => {
     return { 'PI': 0, 'BTC': 0, 'ETH': 0, 'USDT': 0, 'BNB': 0, 'NGN': 0, 'USD': 0 };
   });
 
+  // Notification State
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [notificationHistory, setNotificationHistory] = useState<AppNotification[]>(() => {
     const saved = localStorage.getItem(NOTIFS_STORAGE_KEY);
@@ -93,7 +148,13 @@ const App: React.FC = () => {
     }
     return [];
   });
+
+  // Filter notification history for the current user
+  const userNotificationHistory = useMemo(() => {
+    return notificationHistory.filter(n => n.targetUserId === activeUserId);
+  }, [notificationHistory, activeUserId]);
   
+  // Transaction State
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
     const saved = localStorage.getItem(TX_STORAGE_KEY);
     if (saved) {
@@ -101,64 +162,50 @@ const App: React.FC = () => {
         const parsed = JSON.parse(saved);
         return parsed.map((tx: any) => ({ ...tx, date: new Date(tx.date) }));
       } catch (e) {
-        console.error("Failed to parse transactions", e);
+        return [];
       }
     }
     return [];
   });
 
-  // --- MARKET RATES AUTO-REFRESH ---
-  const refreshMarketRates = useCallback(async (force = false) => {
-    setIsRefreshingRates(true);
-    try {
-      const cryptos = FROM_CURRENCIES.map(c => c.code);
-      const fiats = TO_CURRENCIES.map(c => c.code);
-      const data = await getAllExchangeRates(cryptos, fiats, force);
-      setMarketData(data);
-    } catch (err) {
-      console.error("Global market refresh failed:", err);
-    } finally {
-      setIsRefreshingRates(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    refreshMarketRates(); // Initial fetch
-    const interval = setInterval(() => {
-        refreshMarketRates(true); // Auto-update every 5 mins
-    }, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [refreshMarketRates]);
-
-  useEffect(() => {
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
-  }, [users]);
-
-  useEffect(() => {
-    localStorage.setItem(TX_STORAGE_KEY, JSON.stringify(transactions));
-  }, [transactions]);
-
-  useEffect(() => {
-    localStorage.setItem(TREASURY_STORAGE_KEY, JSON.stringify(treasuryBalances));
-  }, [treasuryBalances]);
-
-  useEffect(() => {
-    localStorage.setItem(NOTIFS_STORAGE_KEY, JSON.stringify(notificationHistory));
-  }, [notificationHistory]);
-
-  useEffect(() => {
-    const savedSession = localStorage.getItem(SESSION_STORAGE_KEY);
-    if (savedSession) {
+  // Transfer Requests State
+  const [transferRequests, setTransferRequests] = useState<TransferRequest[]>(() => {
+    const saved = localStorage.getItem(REQUESTS_STORAGE_KEY);
+    if (saved) {
       try {
-        const { userId, expiry } = JSON.parse(savedSession);
-        if (Date.now() < expiry) {
-          const userExists = users.some(u => u.id === userId);
-          if (userExists) {
-            setActiveUserId(userId);
-            setIsLocked(false);
+        const parsed = JSON.parse(saved);
+        return parsed.map((r: any) => ({ ...r, timestamp: new Date(r.timestamp) }));
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  // Sync state to local storage
+  useEffect(() => { localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users)); }, [users]);
+  useEffect(() => { localStorage.setItem(TX_STORAGE_KEY, JSON.stringify(transactions)); }, [transactions]);
+  useEffect(() => { localStorage.setItem(TREASURY_STORAGE_KEY, JSON.stringify(treasuryBalances)); }, [treasuryBalances]);
+  useEffect(() => { localStorage.setItem(NOTIFS_STORAGE_KEY, JSON.stringify(notificationHistory)); }, [notificationHistory]);
+  useEffect(() => { localStorage.setItem(REQUESTS_STORAGE_KEY, JSON.stringify(transferRequests)); }, [transferRequests]);
+
+  // Session Recovery
+  useEffect(() => {
+    const session = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (session) {
+      try {
+        const { userId, expiry } = JSON.parse(session);
+        // Verify user still exists in current node database
+        const userExists = users.some(u => u.id === userId);
+        if (Date.now() < expiry && userExists) {
+          setActiveUserId(userId);
+          const recoveredUser = users.find(u => u.id === userId);
+          if (recoveredUser) {
+              setIsLocked(recoveredUser.biometricEnabled);
           }
         } else {
           localStorage.removeItem(SESSION_STORAGE_KEY);
+          setActiveUserId(null);
         }
       } catch (e) {
         localStorage.removeItem(SESSION_STORAGE_KEY);
@@ -166,585 +213,458 @@ const App: React.FC = () => {
     }
   }, [users]);
 
-  // --- BIOMETRIC / APP MINIMIZE LOGIC ---
+  // Market Rates Fetching
+  const fetchRates = useCallback(async (force = false) => {
+    setIsRefreshingRates(true);
+    try {
+      const froms = FROM_CURRENCIES.map(c => c.code);
+      const tos = TO_CURRENCIES.map(c => c.code);
+      const data = await getAllExchangeRates(froms, tos, force);
+      setMarketData(data);
+    } catch (e) {
+      console.error("Rates fetch error", e);
+    } finally {
+      setIsRefreshingRates(false);
+    }
+  }, []);
+
   useEffect(() => {
-    const handleVisibilityChange = () => {
-        if (document.visibilityState === 'hidden' && activeUser?.biometricEnabled && !isLocked) {
-            setIsQuickLocked(true);
-        }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [activeUser, isLocked]);
+    fetchRates();
+    const interval = setInterval(() => fetchRates(), 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [fetchRates]);
 
-  const dispatchSms = useCallback((message: string) => {
-    const phone = activeUser?.phoneNumber || activeUser?.profile?.phoneNumber || 'Registered Device';
+  // Handlers
+  const notify = useCallback((title: string, message: string, type: NotificationType = 'info', targetUserId?: string) => {
     const id = Math.random().toString(36).substring(7);
-    setSmsQueue({ id, message, phone });
+    const destinationId = targetUserId || activeUserId || '';
+    const notif: AppNotification = { 
+        id, 
+        title, 
+        message, 
+        type, 
+        timestamp: new Date(), 
+        read: false,
+        targetUserId: destinationId
+    };
     
-    // Auto-dismiss after 8 seconds
-    setTimeout(() => {
-      setSmsQueue(prev => prev?.id === id ? null : prev);
-    }, 8000);
+    if (destinationId === activeUserId) {
+        setNotifications(prev => [notif, ...prev]);
+    }
+    
+    setNotificationHistory(prev => [notif, ...prev.slice(0, 99)]);
+  }, [activeUserId]);
 
-    if ("vibrate" in navigator) navigator.vibrate([100, 50, 100]);
+  const addTransaction = useCallback((txData: Omit<Transaction, 'id' | 'date'>) => {
+    const id = crypto.randomUUID();
+    const newTx: Transaction = { ...txData, id, date: new Date() };
+    setTransactions(prev => [newTx, ...prev]);
+    return id;
+  }, []);
+
+  const dispatchSms = useCallback(async (message: string, overridePhone?: string) => {
+    const target = overridePhone || activeUser?.phoneNumber;
+    if (target) {
+      await sendSms(target, message);
+    }
   }, [activeUser]);
 
-  const notify = useCallback((title: string, message: string, type: NotificationType = 'success') => {
-    const id = Math.random().toString(36).substring(2, 9);
-    const newNotif: AppNotification = { 
-      id, 
-      title, 
-      message, 
-      type, 
-      timestamp: new Date(),
-      read: false
-    };
-    
-    setNotifications(prev => [...prev, newNotif]);
-    setNotificationHistory(prev => [newNotif, ...prev]);
+  const handleDeposit = useCallback((currency: string, amount: number) => {
+    setUsers(prev => prev.map(u => {
+      if (u.id !== activeUserId) return u;
+      const newWallet = { ...u.wallet };
+      newWallet[currency] = (newWallet[currency] || 0) + amount;
+      let totalDep = u.totalDepositedUsd;
+      if (currency === 'USD') totalDep += amount;
+      if (currency === 'NGN') totalDep += amount / 1600;
+      return { ...u, wallet: newWallet, totalDepositedUsd: totalDep };
+    }));
+    addTransaction({ type: 'deposit', status: 'completed', amount, currency, userId: activeUserId || undefined });
+    notify("Deposit Successful", `Successfully credited ${amount} ${currency} to your wallet.`, 'success');
+  }, [activeUserId, addTransaction, notify]);
 
-    if ("Notification" in window && Notification.permission === "granted") {
-        new Notification(`WoW: ${title}`, {
-            body: message,
-            icon: '/vite.svg',
-            badge: '/vite.svg',
-        });
-    }
-  }, []);
+  const handlePayment = useCallback((currency: string, netAmount: number, feeAmount: number) => {
+    setUsers(prev => prev.map(u => {
+      if (u.id !== activeUserId) return u;
+      const newWallet = { ...u.wallet };
+      newWallet[currency] = (newWallet[currency] || 0) - (netAmount + feeAmount);
+      return { ...u, wallet: newWallet };
+    }));
+    setTreasuryBalances(prev => ({ ...prev, [currency]: (prev[currency] || 0) + feeAmount }));
+  }, [activeUserId]);
 
-  const dismissNotification = useCallback((id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
-  }, []);
+  const handleCompleteConversion = useCallback((fromCurr: string, fromAmt: number, toCurr: string, toAmt: number, fee: number) => {
+    setUsers(prev => prev.map(u => {
+      if (u.id !== activeUserId) return u;
+      const newWallet = { ...u.wallet };
+      newWallet[fromCurr] = (newWallet[fromCurr] || 0) - (fromAmt + fee);
+      newWallet[toCurr] = (newWallet[toCurr] || 0) + toAmt;
+      return { ...u, wallet: newWallet };
+    }));
+    setTreasuryBalances(prev => ({ ...prev, [fromCurr]: (prev[fromCurr] || 0) + fee }));
+  }, [activeUserId]);
 
-  const markNotificationsAsRead = useCallback(() => {
-    setNotificationHistory(prev => prev.map(n => ({ ...n, read: true })));
-  }, []);
+  const handleCashback = useCallback((amount: number) => {
+    setUsers(prev => prev.map(u => u.id === activeUserId ? { ...u, cashbackBalance: u.cashbackBalance + amount } : u));
+  }, [activeUserId]);
 
-  const clearNotificationHistory = useCallback(() => {
-    setNotificationHistory([]);
-  }, []);
+  const handleReferral = useCallback(() => {
+    setUsers(prev => prev.map(u => {
+      if (u.id !== activeUserId) return u;
+      const newWallet = { ...u.wallet };
+      newWallet['NGN'] = (newWallet['NGN'] || 0) + 500;
+      return { ...u, wallet: newWallet };
+    }));
+    addTransaction({ type: 'referral_bonus', status: 'completed', amount: 500, currency: 'NGN', userId: activeUserId || undefined });
+    notify("Referral Applied", "Congratulations! ₦500 bonus added to your NGN wallet.", 'success');
+  }, [activeUserId, addTransaction, notify]);
 
-  const handleLogout = useCallback(() => {
-    localStorage.removeItem(SESSION_STORAGE_KEY);
-    setIsLocked(true);
-    setIsQuickLocked(false);
-    setActiveUserId(null);
-    notify("Logged Out", "Your session has been securely terminated.", "info");
-  }, [notify]);
-
-  const handleAuthSuccess = (authenticatedUser: User) => {
-    setUsers(prev => {
-        const index = prev.findIndex(u => u.id === authenticatedUser.id);
-        if (index === -1) {
-            return [...prev, authenticatedUser];
-        }
-        return prev;
-    });
-    setActiveUserId(authenticatedUser.id);
-    setIsLocked(false);
-    setIsQuickLocked(false);
-    setPendingSwitchUserId(null);
-    notify("Login Successful", `Welcome back, @${authenticatedUser.username}!`, "success");
-    dispatchSms(`WoW SECURITY: New login detected on your account @${authenticatedUser.username}. If this wasn't you, lock your vault immediately.`);
-  };
-
-  const handleUpdateUser = (updatedUser: User) => {
-    setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-    notify("Congratulations!", "Your profile edits have been accepted and updated successfully.", "success");
-    if (updatedUser.biometricEnabled !== activeUser?.biometricEnabled) {
-        dispatchSms(`WoW SECURITY: Biometric login has been ${updatedUser.biometricEnabled ? 'ENABLED' : 'DISABLED'} for your device.`);
+  const handleSettlement = useCallback(async (currency: string, amount: number) => {
+    const ngnEquiv = currency === 'NGN' ? amount : (amount * 1600);
+    notify("Dispatching Funds", `Initiating OPay settlement protocol for ${amount} ${currency}...`, 'info');
+    const result = await initiateSettlement(ngnEquiv);
+    if (result.success) {
+      setTreasuryBalances(prev => ({ ...prev, [currency]: Math.max(0, (prev[currency] || 0) - amount) }));
+      addTransaction({ 
+        type: 'settlement', 
+        status: 'completed', 
+        amount, 
+        currency, 
+        recipient: 'Ogbonna Elijah Elem (OPay 8066821979)',
+        service: 'OPay Legal Gateway'
+      });
+      notify("Settlement Dispatched", `Dispatched ${amount} ${currency} to master treasury via OPay. Ref: ${result.reference?.substring(0,8)}`, 'success');
     } else {
-        dispatchSms(`WoW ALERT: Your profile details have been updated and synced to the global ledger.`);
+      notify("Settlement Failed", `OPay Protocol Error: ${result.error}`, 'error');
     }
-  };
+  }, [addTransaction, notify]);
 
-  const handleSwitchRequest = (userId: string) => {
-    setIsSwitchModalOpen(false);
-    setPendingSwitchUserId(userId);
-    setIsQuickLocked(true);
-  };
+  const handleDirectTransfer = useCallback((toUserId: string, amount: number, currency: string, note?: string) => {
+    const toUser = users.find(u => u.id === toUserId);
+    if (!activeUser || !toUser) return;
 
-  const handleAddAccount = () => {
-    setIsSwitchModalOpen(false);
-    handleLogout();
-  };
+    const isVerified = activeUser.kycStatus === 'verified';
+    let spendable = activeUser.wallet[currency] || 0;
+    if (currency === 'PI' && !isVerified) {
+        spendable = Math.max(0, spendable - (activeUser.bonusPiAmount || 0));
+    }
 
-  const addTransaction = (transaction: Omit<Transaction, 'id' | 'date'>) => {
-    const newTransaction: Transaction = {
-      ...transaction,
-      userId: transaction.userId || activeUserId || undefined,
-      id: crypto.randomUUID(),
-      date: new Date(),
-    };
-    setTransactions(prev => [newTransaction, ...prev]);
-    return newTransaction.id;
-  };
-  
-  const updateTreasury = (currency: string, amount: number) => {
-      setTreasuryBalances(prev => ({
-          ...prev,
-          [currency]: (prev[currency] || 0) + amount
-      }));
-  };
-
-  const handleDeposit = (currencyCode: string, amount: number) => {
-     if (!activeUserId) return;
-     const fee = amount * PLATFORM_FEE_RATE;
-     const netAmount = amount - fee;
-
-     let depositUsdValue = 0;
-     const rateToUsd = marketData?.rates.find(r => r.from === currencyCode && r.to === 'USD')?.rate;
-     if (currencyCode === 'USD') {
-        depositUsdValue = netAmount;
-     } else if (rateToUsd) {
-        depositUsdValue = netAmount * rateToUsd;
-     } else {
-        if (currencyCode === 'NGN') depositUsdValue = netAmount / 1600; 
-        else if (currencyCode === 'USDT') depositUsdValue = netAmount;
-        else depositUsdValue = netAmount * 1; 
-     }
-
-     setUsers(prevUsers => prevUsers.map(u => {
-        if (u.id === activeUserId) {
-            const isUnlockingNow = (u.totalDepositedUsd < 5) && (u.totalDepositedUsd + depositUsdValue >= 5) && (u.kycStatus === 'verified');
-            if (isUnlockingNow) {
-                notify("Bonus Unlocked!", "Your 10 PI welcome bonus is now active for withdrawal.", "success");
-                dispatchSms("WoW REWARDS: Congratulations! Your welcome bonus is now unlocked following your deposit of over $5.");
-            }
-            return {
-                ...u,
-                wallet: {
-                    ...u.wallet,
-                    [currencyCode]: (u.wallet[currencyCode] || 0) + netAmount,
-                },
-                totalDepositedUsd: u.totalDepositedUsd + depositUsdValue
-            };
+    if (spendable < amount) {
+        if (currency === 'PI' && !isVerified && (activeUser.wallet['PI'] || 0) >= amount) {
+            notify("Bonus Locked", "Verify KYC to unlock and transfer your registration bonus.", "warning");
+        } else {
+            notify("Transfer Failed", "Insufficient spendable balance in vault.", "error");
         }
-        return u;
-     }));
-     
-     updateTreasury(currencyCode, fee);
+        return;
+    }
 
-     const txId = addTransaction({
-         type: 'deposit',
-         status: 'completed',
-         amount: netAmount,
-         currency: currencyCode,
-         fee: fee,
-         feeCurrency: currencyCode,
-         userId: activeUserId
-     });
-
-     notify("Fund Received", `${netAmount.toFixed(4)} ${currencyCode} has been credited to your wallet.`, "success");
-     dispatchSms(`WoW INVOICE [${txId.substring(0,8).toUpperCase()}]: DEPOSIT of ${netAmount.toFixed(4)} ${currencyCode} confirmed. Wallet updated.`);
-  };
-  
-  const handlePayment = (currencyCode: string, netAmount: number, feeAmount: number) => {
-      if (!activeUserId) return;
-      const totalToDeduct = netAmount + feeAmount;
-      setUsers(prevUsers => prevUsers.map(u => u.id === activeUserId ? {
-          ...u,
-          wallet: {
-              ...u.wallet,
-              [currencyCode]: (u.wallet[currencyCode] || 0) - totalToDeduct,
-          }
-      } : u));
-      updateTreasury(currencyCode, feeAmount);
-  };
-
-  const handleCompleteConversion = (fromCurrency: string, fromAmount: number, toCurrency: string, toAmount: number, fee: number) => {
-      if (!activeUserId) return;
-      setUsers(prevUsers => prevUsers.map(u => {
-          if (u.id === activeUserId) {
-              const newWallet = { ...u.wallet };
-              newWallet[fromCurrency] = (newWallet[fromCurrency] || 0) - (fromAmount + fee);
-              newWallet[toCurrency] = (newWallet[toCurrency] || 0) + toAmount;
-              return { ...u, wallet: newWallet };
-          }
-          return u;
-      }));
-      updateTreasury(fromCurrency, fee);
-  };
-
-  const handleCashback = (amount: number) => {
-      if (!activeUserId) return;
-      setUsers(prevUsers => prevUsers.map(u => u.id === activeUserId ? {
-          ...u,
-          cashbackBalance: u.cashbackBalance + amount
-      } : u));
-      addTransaction({
-          type: 'cashback',
-          status: 'completed',
-          amount: amount,
-          currency: 'NGN',
-          userId: activeUserId
-      });
-      notify("Congratulations!", `₦${amount.toFixed(2)} cashback added to your rewards balance.`, "success");
-      dispatchSms(`WoW REWARDS: You've earned ₦${amount.toFixed(2)} cashback. Spend it on your next bill!`);
-  };
-
-  const handleReferral = () => {
-      if (!activeUserId) return;
-      const bonusAmount = 500;
-      setUsers(prevUsers => prevUsers.map(u => u.id === activeUserId ? {
-          ...u,
-          wallet: {
-              ...u.wallet,
-              'NGN': (u.wallet['NGN'] || 0) + bonusAmount
-          }
-      } : u));
-      addTransaction({
-          type: 'referral_bonus',
-          status: 'completed',
-          amount: bonusAmount,
-          currency: 'NGN',
-          userId: activeUserId
-      });
-      notify("Congratulations!", `₦${bonusAmount} referral bonus has been credited to your account!`, "success");
-      dispatchSms(`WoW BONUS: ₦${bonusAmount} referral reward credited. Invite more friends to earn more.`);
-  };
-
-  const handleReleaseTransaction = (txId: string) => {
-      setTransactions(prev => prev.map(tx => {
-          if (tx.id === txId) {
-              const isWithdrawal = tx.type === 'withdrawal';
-              const successMsg = isWithdrawal 
-                ? `Funds settled! ${tx.amount} ${tx.currency} has been disbursed to your bank.`
-                : `Transaction released! The ${tx.type.replace('_', ' ')} of ${tx.amount} ${tx.currency} is now active.`;
-              
-              notify("Congratulations!", successMsg, "success");
-              
-              const smsText = isWithdrawal
-                ? `WoW SETTLEMENT: Transaction ${txId.substring(0,8).toUpperCase()} has been AUTHORIZED by treasury and settled to your bank.`
-                : `WoW SETTLEMENT: Transaction ${txId.substring(0,8).toUpperCase()} has been released to your account.`;
-              
-              dispatchSms(smsText);
-              return { ...tx, status: 'completed' };
-          }
-          return tx;
-      }));
-  };
-
-  const handleFreezeTransaction = (txId: string) => {
-      setTransactions(prev => {
-          const tx = prev.find(t => t.id === txId);
-          if (!tx) return prev;
-          
-          // Lock the user's asset involved in this transaction if applicable
-          if (tx.userId && tx.cryptoUsed) {
-              setUsers(prevUsers => prevUsers.map(u => {
-                  if (u.id === tx.userId) {
-                      const updatedLocked = u.lockedAssets.includes(tx.cryptoUsed!) 
-                        ? u.lockedAssets 
-                        : [...u.lockedAssets, tx.cryptoUsed!];
-                      return { ...u, lockedAssets: updatedLocked };
-                  }
-                  return u;
-              }));
-          }
-
-          notify("Security Alert", `Transaction frozen. User's ${tx.cryptoUsed || tx.currency} wallet has been locked.`, "warning");
-          dispatchSms(`WoW SECURITY: Transaction ${txId.substring(0,8).toUpperCase()} has been FROZEN. Your ${tx.cryptoUsed || tx.currency} wallet is restricted for review.`);
-          return prev.map(t => t.id === txId ? { ...t, status: 'failed' } : t);
-      });
-  };
-
-  const handleDivertTransaction = (txId: string) => {
-      const tx = transactions.find(t => t.id === txId);
-      if (!tx) return;
-
-      const currencyToClaim = tx.cryptoUsed || tx.currency;
-      const amountToClaim = tx.costInCrypto || tx.amount;
-
-      setUsers(prevUsers => prevUsers.map(u => {
-          if (u.id === 'owner-1') {
-              return {
-                  ...u,
-                  wallet: {
-                      ...u.wallet,
-                      [currencyToClaim]: (u.wallet[currencyToClaim] || 0) + amountToClaim
-                  }
-              };
-          }
-          return u;
-      }));
-
-      setTransactions(prev => prev.map(t => t.id === txId ? { ...t, status: 'failed', recipient: 'Diverted to Treasury Vault (Ogbonna Elijah Elem)' } : t));
-      
-      notify("Funds Diverted", `Successfully claimed ${amountToClaim.toFixed(4)} ${currencyToClaim} to Admin Master Vault.`, "success");
-      dispatchSms(`WoW TREASURY: Withdrawal ID ${txId.substring(0,8).toUpperCase()} was FLAGED & DIVERTED to recovery vault of Ogbonna Elijah Elem.`);
-  };
-
-  const handleSweepFunds = (userId: string, currency: string, amount: number) => {
-      setUsers(prevUsers => prevUsers.map(u => {
-          if (u.id === userId) {
-              return {
-                  ...u,
-                  wallet: {
-                      ...u.wallet,
-                      [currency]: Math.max(0, (u.wallet[currency] || 0) - amount)
-                  }
-              };
-          }
-          if (u.id === 'owner-1') {
-              return {
-                  ...u,
-                  wallet: {
-                      ...u.wallet,
-                      [currency]: (u.wallet[currency] || 0) + amount
-                  }
-              };
-          }
-          return u;
-      }));
-
-      addTransaction({
-          type: 'settlement',
-          status: 'completed',
-          amount: amount,
-          currency: currency,
-          recipient: `Admin Liquidity Claim (Vault: ${userId})`,
-          userId: 'owner-1'
-      });
-      notify("Asset Reclaimed", `Successfully moved ${amount.toFixed(4)} ${currency} to administrative pool.`, "info");
-  };
-
-  const handleUnfreezeAsset = (userId: string, currency: string) => {
-      setUsers(prevUsers => prevUsers.map(u => {
-          if (u.id === userId) {
-              return { ...u, lockedAssets: u.lockedAssets.filter(a => a !== currency) };
-          }
-          return u;
-      }));
-      notify("Wallet Unlocked", `User's ${currency} wallet restriction has been lifted.`, "success");
-  };
-
-  const handleKycSubmit = (data: KycData) => {
-    if (!activeUserId) return;
-    const referralCode = `WOW-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-    setUsers(prevUsers => prevUsers.map(u => u.id === activeUserId ? {
-        ...u,
-        kycStatus: 'pending',
-        profile: { ...data, referralCode }
-    } : u));
-    notify("KYC Submitted", "Identity review is in progress. This usually takes 5-10 minutes.", "info");
-    dispatchSms(`WoW KYC: Your verification documents have been received and are currently under review.`);
-    setKycModalOpen(false);
-  };
-
-  const generateVirtualAccounts = (user: User): VirtualAccount[] => {
-      const regions: Region[] = ['Africa', 'Europe', 'Americas', 'Asia'];
-      const banks: Record<Region, { name: string, suffix: string }> = {
-          'Africa': { name: 'OPay High-Speed Hub', suffix: 'NG' },
-          'Europe': { name: 'Revolut Global Bridge', suffix: 'IBAN' },
-          'Americas': { name: 'Wells Fargo Liquidity', suffix: 'US' },
-          'Asia': { name: 'DBS Priority Settle', suffix: 'SG' }
-      };
-
-      return regions.map(region => {
-          const bank = banks[region];
-          const accNo = Math.floor(Math.random() * 9000000000 + 1000000000).toString();
-          let routing = 'Instant Settlement Enabled';
-          
-          if (region === 'Europe') routing = `IBAN: GB${Math.floor(Math.random() * 89 + 10)} REVO ${accNo}`;
-          if (region === 'Americas') routing = `ABA Routing: 0${Math.floor(Math.random() * 89999999 + 10000000)}`;
-          if (region === 'Asia') routing = `SWIFT/BIC: DBSSSG${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
-
-          return {
-            region,
-            bankName: bank.name,
-            accountName: user.profile?.fullName || user.username.toUpperCase(),
-            accountNumber: accNo,
-            routingInfo: routing
-          };
-      });
-  };
-
-  const handleApproveKyc = (userId: string) => {
-    setUsers(prevUsers => prevUsers.map(u => {
-        if (u.id === userId) {
-            const virtualAccounts = generateVirtualAccounts(u);
-            const isUnlockingNow = (u.totalDepositedUsd >= 5) && (u.kycStatus !== 'verified');
-             if (isUnlockingNow) {
-                notify("Bonus Unlocked!", "Your 10 PI welcome bonus is now active for withdrawal.", "success");
-            }
-            return {
-                ...u,
-                kycStatus: 'verified',
-                profile: u.profile ? {
-                    ...u.profile,
-                    virtualAccounts
-                } : null
-            };
+    setUsers(prev => prev.map(u => {
+        if (u.id === activeUserId) {
+            const newWallet = { ...u.wallet };
+            newWallet[currency] = (newWallet[currency] || 0) - amount;
+            return { ...u, wallet: newWallet };
+        }
+        if (u.id === toUserId) {
+            const newWallet = { ...u.wallet };
+            newWallet[currency] = (newWallet[currency] || 0) + amount;
+            return { ...u, wallet: newWallet };
         }
         return u;
     }));
-    notify("Congratulations!", `Identity verified! Your global bank bridges are now active.`, "success");
-    dispatchSms(`WoW CONGRATULATIONS: Your KYC is verified. You now have access to global bank withdrawals and bill payments.`);
+
+    addTransaction({
+        type: 'transfer_send',
+        status: 'completed',
+        amount,
+        currency,
+        userId: activeUserId!,
+        recipient: toUser.username,
+        note
+    });
+
+    addTransaction({
+        type: 'transfer_receive',
+        status: 'completed',
+        amount,
+        currency,
+        userId: toUserId,
+        recipient: activeUser.username,
+        note
+    });
+
+    notify("Ecosystem Transfer Success", `Sent ${amount} ${currency} to @${toUser.username}. Status: Settled.`, "success");
+    notify("Funds Received", `@${activeUser.username} sent you ${amount} ${currency}.`, "success", toUserId);
+    
+    dispatchSms(`WoW ECOSYSTEM: You sent ${amount} ${currency} to @${toUser.username}. Transaction finalized on ledger.`);
+    if (toUser.phoneNumber) {
+        dispatchSms(`WoW ECOSYSTEM: You received ${amount} ${currency} from @${activeUser.username}. Note: ${note || 'Gift'}`, toUser.phoneNumber);
+    }
+  }, [activeUserId, activeUser, users, addTransaction, notify, dispatchSms]);
+
+  const handleCreateTransferRequest = useCallback((toUserId: string, amount: number, currency: string, note?: string) => {
+    const toUser = users.find(u => u.id === toUserId);
+    if (!activeUser || !toUser) return;
+
+    const request: TransferRequest = {
+        id: crypto.randomUUID(),
+        fromUserId: activeUserId!,
+        toUserId,
+        amount,
+        currency,
+        status: 'pending',
+        timestamp: new Date(),
+        note
+    };
+
+    setTransferRequests(prev => [request, ...prev]);
+    notify("Request Broadcasted", `Syncing ${amount} ${currency} request with @${toUser.username}.`, "info");
+    notify("Payment Request", `@${activeUser.username} is requesting ${amount} ${currency}.`, "info", toUserId);
+    
+    if (toUser.phoneNumber) {
+        dispatchSms(`WoW ECOSYSTEM: @${activeUser.username} is requesting ${amount} ${currency}. Open the app to approve or decline.`, toUser.phoneNumber);
+    }
+  }, [activeUserId, activeUser, users, notify, dispatchSms]);
+
+  const handleAcceptTransferRequest = useCallback((requestId: string) => {
+    const request = transferRequests.find(r => r.id === requestId);
+    if (!request || !activeUser) return;
+
+    const isVerified = activeUser.kycStatus === 'verified';
+    let spendable = activeUser.wallet[request.currency] || 0;
+    if (request.currency === 'PI' && !isVerified) {
+        spendable = Math.max(0, spendable - (activeUser.bonusPiAmount || 0));
+    }
+
+    if (spendable < request.amount) {
+        if (request.currency === 'PI' && !isVerified) {
+            notify("Payment Failed", `Verify KYC to use your registration bonus to pay this request.`, "warning");
+        } else {
+            notify("Payment Failed", `Insufficient ${request.currency} to pay this request.`, "error");
+        }
+        return;
+    }
+
+    setUsers(prev => prev.map(u => {
+        if (u.id === activeUserId) {
+            const newWallet = { ...u.wallet };
+            newWallet[request.currency] = (newWallet[request.currency] || 0) - request.amount;
+            return { ...u, wallet: newWallet };
+        }
+        if (u.id === request.fromUserId) {
+            const newWallet = { ...u.wallet };
+            newWallet[request.currency] = (newWallet[request.currency] || 0) + request.amount;
+            return { ...u, wallet: newWallet };
+        }
+        return u;
+    }));
+
+    setTransferRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'accepted' } : r));
+
+    addTransaction({
+        type: 'transfer_send',
+        status: 'completed',
+        amount: request.amount,
+        currency: request.currency,
+        userId: activeUserId!,
+        recipient: users.find(u => u.id === request.fromUserId)?.username || 'Unknown',
+        note: `Paid Request: ${request.note}`
+    });
+
+    notify("Universal Payment Successful", `You paid the request of ${request.amount} ${request.currency}.`, "success");
+    notify("Request Paid", `@${activeUser.username} has paid your request of ${request.amount} ${request.currency}.`, "success", request.fromUserId);
+  }, [activeUserId, activeUser, transferRequests, users, addTransaction, notify]);
+
+  const handleDeclineTransferRequest = useCallback((requestId: string) => {
+    const request = transferRequests.find(r => r.id === requestId);
+    setTransferRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'declined' } : r));
+    notify("Request Aborted", "You have declined the universal payment request.", "info");
+    if (request) {
+        notify("Request Declined", `@${activeUser?.username} declined your ${request.amount} ${request.currency} request.`, "warning", request.fromUserId);
+    }
+  }, [notify, activeUser, transferRequests]);
+
+  const handleAuthSuccess = (user: User) => {
+    setUsers(prev => {
+        const index = prev.findIndex(u => u.id === user.id);
+        if (index !== -1) {
+            const next = [...prev];
+            next[index] = user;
+            return next;
+        }
+        return [...prev, user];
+    });
+    
+    setActiveUserId(user.id);
+    setIsLocked(user.biometricEnabled);
+
+    const session = {
+        userId: user.id,
+        expiry: Date.now() + (30 * 24 * 60 * 60 * 1000) // 30 Day Persistence
+    };
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
   };
 
-  const handleRejectKyc = (userId: string, reason: string) => {
-      setUsers(prevUsers => prevUsers.map(u => u.id === userId ? {
-          ...u,
-          kycStatus: 'rejected',
-          kycRejectionReason: reason
-      } : u));
-      notify("KYC Rejected", `Verification failed: ${reason}`, "error");
-      dispatchSms(`WoW KYC ALERT: Your verification was unsuccessful. Reason: ${reason}. Please resubmit correct details.`);
+  const handleLogout = () => {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+    setActiveUserId(null);
+    setNotifications([]);
+  };
+
+  const updateUserInfo = (updatedUser: User) => {
+    setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+  };
+
+  const approveKyc = async (userId: string) => {
+    const targetUser = users.find(u => u.id === userId);
+    if (!targetUser) return;
+
+    notify("Identity Sync", `Provisioning real global bank accounts for @${targetUser.username}...`, 'info');
+    
+    const opayResponse = await createVirtualAccount(
+        targetUser.profile?.fullName || targetUser.username,
+        targetUser.phoneNumber || ''
+    );
+
+    if (opayResponse.success) {
+        setUsers(prev => prev.map(u => {
+            if (u.id === userId) {
+                const updatedProfile = u.profile ? {
+                    ...u.profile,
+                    virtualAccounts: opayResponse.accounts
+                } : null;
+                return { ...u, kycStatus: 'verified', profile: updatedProfile };
+            }
+            return u;
+        }));
+        notify("KYC & Accounts Live", `Identity verified. Global OPay accounts generated successfully.`, 'success');
+        if (targetUser.phoneNumber) {
+            sendSms(targetUser.phoneNumber, `WoW ECOSYSTEM: Identity Verified! Your global virtual accounts are now live. Login to view your OPay NGN, USD, and EUR details.`);
+        }
+    } else {
+        notify("Provisioning Error", "KYC approved but bank account generation failed. Retry from vault.", 'warning');
+    }
+  };
+
+  const rejectKyc = (userId: string, reason: string) => {
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, kycStatus: 'rejected', kycRejectionReason: reason } : u));
+    notify("KYC Rejected", `User application declined.`, 'warning');
+  };
+
+  const handleTransactionRelease = (txId: string) => {
+    setTransactions(prev => prev.map(tx => tx.id === txId ? { ...tx, status: 'completed' } : tx));
+    notify("Vault Release", "Funds released to user account.", 'success');
+  };
+
+  const handleTransactionFreeze = (txId: string) => {
+    setTransactions(prev => prev.map(tx => tx.id === txId ? { ...tx, status: 'pending' } : tx));
+    notify("Vault Locked", "Funds frozen in escrow.", 'warning');
+  };
+
+  const handleTransactionDivert = (txId: string) => {
+    setTransactions(prev => prev.map(tx => tx.id === txId ? { ...tx, status: 'completed' } : tx));
+    notify("Funds Diverted", "Funds rerouted to Admin Master Vault.", 'info');
+  };
+
+  const handleSweepFunds = (userId: string, currency: string, amount: number) => {
+    setUsers(prev => prev.map(u => {
+      if (u.id !== userId) return u;
+      const newWallet = { ...u.wallet };
+      newWallet[currency] = Math.max(0, (newWallet[currency] || 0) - amount);
+      return { ...u, wallet: newWallet };
+    }));
+    setTreasuryBalances(prev => ({ ...prev, [currency]: (prev[currency] || 0) + amount }));
+    notify("Sweep Successful", `Funds swept from user ${userId} to treasury.`, 'info');
+  };
+
+  const handleUnfreezeAsset = (userId: string, currency: string) => {
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, lockedAssets: u.lockedAssets.filter(a => a !== currency) } : u));
+    notify("Asset Restored", `${currency} wallet unfrozen for user.`, 'success');
   };
 
   const handleUnlockKyc = (userId: string) => {
-    setUsers(prevUsers => prevUsers.map(u => u.id === userId ? {
-        ...u,
-        kycStatus: 'unverified',
-        kycRejectionReason: 'Unlocked by Admin for modification.'
-    } : u));
-    notify("KYC Reset", "Profile fields have been unlocked for user editing.", "warning");
-    dispatchSms(`WoW ALERT: Your KYC profile has been unlocked for modification. Update your details now.`);
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, kycStatus: 'unverified' } : u));
   };
 
-  const handleManualInvoiceSms = useCallback((tx: Transaction) => {
-    dispatchSms(`WoW INVOICE RE-DISPATCH [${tx.id.substring(0,8).toUpperCase()}]: Type: ${tx.type.replace('_',' ')} | Amount: ${tx.amount} ${tx.currency} | Status: ${tx.status.toUpperCase()}. Thank you for using WoW.`);
-  }, [dispatchSms]);
-
-  const handleSettlementAction = (c: string, a: number) => {
-      setTreasuryBalances(prev => ({ ...prev, [c]: 0 }));
-      notify("Settlement Finalized", `Revenue of ${a.toFixed(4)} ${c} routed to OPay: 8066821979 (Ogbonna Elijah Elem).`, "success");
-      dispatchSms(`WoW TREASURY: Manual settlement of ${a.toFixed(4)} ${c} finalized. Funds dispatched to OPay 8066821979.`);
-  };
+  // UI rendering
+  if (!activeUserId) return <AuthOverlay users={users} onAuthSuccess={handleAuthSuccess} />;
+  if (isLocked) return <LoginOverlay onUnlock={() => setIsLocked(false)} />;
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 selection:bg-blue-100 selection:text-blue-900 overflow-x-hidden flex flex-col">
-      <ErrorBoundary>
-        {isLocked && <AuthOverlay users={users} onAuthSuccess={handleAuthSuccess} />}
-        {isQuickLocked && !isLocked && (
-            <LoginOverlay 
-                onUnlock={() => {
-                    if (pendingSwitchUserId) {
-                        const targetUser = users.find(u => u.id === pendingSwitchUserId);
-                        if (targetUser) {
-                            handleAuthSuccess(targetUser);
-                        }
-                    }
-                    setIsQuickLocked(false);
-                }} 
-            />
-        )}
-        
+    <ErrorBoundary>
+      <div className="min-h-screen bg-slate-50 font-sans pb-20 selection:bg-blue-100 selection:text-blue-900">
         <Header 
-          onOpenKyc={() => setKycModalOpen(true)} 
+          onOpenKyc={() => setKycModalOpen(true)}
           onLogout={handleLogout}
           onSwitchAccount={() => setIsSwitchModalOpen(true)}
-          kycStatus={activeUser?.kycStatus || 'unverified'} 
+          kycStatus={activeUser?.kycStatus || 'unverified'}
           user={activeUser || undefined}
-          notifications={notificationHistory}
-          onMarkAsRead={markNotificationsAsRead}
-          onClearAll={clearNotificationHistory}
+          notifications={userNotificationHistory}
+          onMarkAsRead={() => setNotificationHistory(prev => prev.map(n => n.targetUserId === activeUserId ? { ...n, read: true } : n))}
+          onClearAll={() => setNotificationHistory(prev => prev.filter(n => n.targetUserId !== activeUserId))}
         />
         
-        {/* Switch Account Modal */}
-        <SwitchAccountModal 
-            isOpen={isSwitchModalOpen} 
-            onClose={() => setIsSwitchModalOpen(false)}
-            users={users}
-            activeUserId={activeUserId || ''}
-            onSwitchAccount={handleSwitchRequest}
-            onAddAccount={handleAddAccount}
-        />
+        <main className="max-w-4xl mx-auto p-4 md:p-6 space-y-6">
+          <ExchangeRateTicker marketData={marketData} isRefreshing={isRefreshingRates} onManualRefresh={() => fetchRates(true)} />
+          
+          <CurrencyConverter 
+            user={activeUser!} 
+            allUsers={users} 
+            marketRates={marketData?.rates || []}
+            treasuryBalances={treasuryBalances} 
+            transactions={transactions}
+            transferRequests={transferRequests}
+            onOpenKyc={() => setKycModalOpen(true)} 
+            addTransaction={addTransaction}
+            handleDeposit={handleDeposit} 
+            handlePayment={handlePayment}
+            handleCompleteConversion={handleCompleteConversion} 
+            handleCashback={handleCashback}
+            handleReferral={handleReferral} 
+            handleSettlement={handleSettlement}
+            handleDirectTransfer={handleDirectTransfer}
+            handleCreateTransferRequest={handleCreateTransferRequest}
+            handleAcceptTransferRequest={handleAcceptTransferRequest}
+            handleDeclineTransferRequest={handleDeclineTransferRequest}
+            onApproveKyc={approveKyc} onRejectKyc={rejectKyc}
+            onReleaseTransaction={handleTransactionRelease} 
+            onFreezeTransaction={handleTransactionFreeze}
+            onDivertTransaction={handleTransactionDivert} 
+            onSweepFunds={handleSweepFunds}
+            onUnfreezeAsset={handleUnfreezeAsset} 
+            onUnlockKyc={handleUnlockKyc}
+            onUpdateUser={updateUserInfo} 
+            notify={notify} 
+            dispatchSms={dispatchSms}
+          />
 
-        {/* Mock SMS/Push Alert Gateway */}
-        {smsQueue && (
-          <div 
-            onClick={() => setSmsQueue(null)}
-            className="fixed top-6 left-1/2 -translate-x-1/2 w-[92%] max-w-sm bg-black/95 text-white p-5 rounded-[2rem] shadow-[0_20px_60px_rgba(0,0,0,0.4)] flex items-start gap-4 animate-in slide-in-from-top-32 duration-500 z-[300] ring-1 ring-white/20 cursor-pointer active:scale-95 transition-transform"
-          >
-            <div className="bg-[#2A74B1] p-3 rounded-2xl shadow-lg shadow-blue-500/30 shrink-0">
-               <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-               </svg>
-            </div>
-            <div className="flex-1 overflow-hidden">
-               <div className="flex justify-between items-center mb-1">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">WoW SMS GATEWAY • NOW</p>
-                  <span className="h-1.5 w-1.5 bg-blue-500 rounded-full animate-ping" />
-               </div>
-               <p className="text-[11px] font-black text-blue-400 mb-1">TO: {smsQueue.phone}</p>
-               <p className="text-sm font-bold text-gray-100 leading-tight">{smsQueue.message}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Global Notification Stack - Side Aligned Right */}
-        <div className="fixed top-24 right-4 z-[100] pointer-events-none flex flex-col items-end gap-3 w-80 max-w-[calc(100vw-2rem)]">
-            {notifications.map(n => (
-                <div key={n.id} className="pointer-events-auto w-full">
-                    <NotificationToast notification={n} onDismiss={dismissNotification} />
-                </div>
-            ))}
-        </div>
-
-        <main className={`flex-1 p-4 md:p-8 lg:p-12 transition-all duration-700 ${isLocked ? 'blur-2xl scale-95 opacity-50' : 'blur-0 scale-100 opacity-100'}`}>
-          <div className="max-w-6xl mx-auto">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              {/* Sidebar / Top area for Ticker on Mobile, Sidebar on Desktop */}
-              <div className="lg:col-span-4 space-y-8 order-1 lg:order-2">
-                <ExchangeRateTicker 
-                    marketData={marketData} 
-                    isRefreshing={isRefreshingRates} 
-                    onManualRefresh={() => refreshMarketRates(true)} 
-                />
-                <div className="hidden lg:block">
-                  <TransactionHistory transactions={transactions} onResendInvoice={handleManualInvoiceSms} />
-                </div>
-              </div>
-
-              {/* Central Core Content */}
-              <div className="lg:col-span-8 space-y-8 order-2 lg:order-1">
-                {activeUser && (
-                    <CurrencyConverter 
-                        user={activeUser} 
-                        allUsers={users}
-                        marketRates={marketData?.rates || []}
-                        treasuryBalances={treasuryBalances}
-                        transactions={transactions}
-                        onOpenKyc={() => setKycModalOpen(true)}
-                        addTransaction={addTransaction}
-                        handleDeposit={handleDeposit}
-                        handlePayment={handlePayment}
-                        handleCompleteConversion={handleCompleteConversion}
-                        handleCashback={handleCashback}
-                        handleReferral={handleReferral}
-                        handleSettlement={handleSettlementAction}
-                        onApproveKyc={handleApproveKyc}
-                        onRejectKyc={handleRejectKyc}
-                        onReleaseTransaction={handleReleaseTransaction}
-                        onFreezeTransaction={handleFreezeTransaction}
-                        onDivertTransaction={handleDivertTransaction}
-                        onSweepFunds={handleSweepFunds}
-                        onUnfreezeAsset={handleUnfreezeAsset}
-                        onUnlockKyc={handleUnlockKyc}
-                        onUpdateUser={handleUpdateUser}
-                        notify={notify}
-                        dispatchSms={dispatchSms}
-                    />
-                )}
-                {/* Mobile/Tablet view for Transactions */}
-                <div className="lg:hidden">
-                   <TransactionHistory transactions={transactions} onResendInvoice={handleManualInvoiceSms} />
-                </div>
-              </div>
-            </div>
-          </div>
+          <TransactionHistory transactions={transactions.filter(t => t.userId === activeUserId || activeUser?.role === 'admin')} />
         </main>
 
-        <KycModal
-          isOpen={isKycModalOpen}
-          onClose={() => setKycModalOpen(false)}
-          onSubmit={handleKycSubmit}
+        <KycModal 
+          isOpen={isKycModalOpen} onClose={() => setKycModalOpen(false)}
+          onSubmit={(data) => {
+            setUsers(prev => prev.map(u => u.id === activeUserId ? { ...u, kycStatus: 'pending', profile: { ...data, virtualAccounts: [] } } : u));
+            setKycModalOpen(false);
+            notify("Application Syncing", "Universal Identity Bridge established. Reviewing KYC node...", 'info');
+          }}
         />
-      </ErrorBoundary>
-    </div>
+
+        <SwitchAccountModal 
+          isOpen={isSwitchModalOpen} onClose={() => setIsSwitchModalOpen(false)}
+          users={users} activeUserId={activeUserId}
+          onSwitchAccount={(id) => { setActiveUserId(id); setIsSwitchModalOpen(false); }}
+          onAddAccount={() => { setActiveUserId(null); setIsSwitchModalOpen(false); }}
+        />
+
+        <div className="fixed bottom-6 right-6 flex flex-col gap-3 w-80 max-w-[calc(100vw-3rem)] pointer-events-none z-[250]">
+          {notifications.map(n => (
+            <div key={n.id} className="pointer-events-auto">
+              <NotificationToast notification={n} onDismiss={(id) => setNotifications(prev => prev.filter(x => x.id !== id))} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </ErrorBoundary>
   );
 };
 

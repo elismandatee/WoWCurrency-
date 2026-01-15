@@ -12,7 +12,8 @@ const PLATFORM_FEE_RATE = 0.015;
 interface BillsViewProps {
   user: User;
   handlePayment: (currencyCode: string, netAmount: number, feeAmount: number) => void;
-  addTransaction: (transaction: Omit<Transaction, 'id' | 'date'>) => void;
+  // Fix: Changed return type from void to string because App.tsx addTransaction returns the transaction ID
+  addTransaction: (transaction: Omit<Transaction, 'id' | 'date'>) => string;
   handleCashback: (amount: number) => void;
   notify: (title: string, message: string, type?: any) => void;
   dispatchSms?: (message: string) => void;
@@ -50,6 +51,16 @@ const BillsView: React.FC<BillsViewProps> = ({ user, handlePayment, addTransacti
   const platformFeeNgn = useMemo(() => paymentAmountNgn * PLATFORM_FEE_RATE, [paymentAmountNgn]);
   const totalCostNgn = useMemo(() => paymentAmountNgn + platformFeeNgn, [paymentAmountNgn, platformFeeNgn]);
 
+  // ENFORCE BONUS LOCK: Calculate spendable balance based on KYC status
+  const spendable = useMemo(() => {
+    const bal = user.wallet[payWith.code] || 0;
+    const isVerified = user.kycStatus === 'verified';
+    if (payWith.code === 'PI' && !isVerified) {
+        return Math.max(0, bal - (user.bonusPiAmount || 0));
+    }
+    return bal;
+  }, [user.wallet, payWith, user.kycStatus, user.bonusPiAmount]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (paymentAmountNgn <= 0) {
@@ -68,8 +79,11 @@ const BillsView: React.FC<BillsViewProps> = ({ user, handlePayment, addTransacti
         const cryptoFee = platformFeeNgn / rate;
         const cryptoNetCost = paymentAmountNgn / rate;
         
-        if ((user.wallet[payWith.code] || 0) < cryptoTotalCost) {
-            throw new Error(`Insufficient ${payWith.code} balance.`);
+        if (spendable < cryptoTotalCost) {
+            if (payWith.code === 'PI' && user.kycStatus !== 'verified' && (user.wallet['PI'] || 0) >= cryptoTotalCost) {
+                throw new Error(`Registration bonus is locked. Verify KYC to unlock.`);
+            }
+            throw new Error(`Insufficient spendable ${payWith.code} balance.`);
         }
         
         await new Promise(res => setTimeout(res, 1000));
@@ -93,6 +107,7 @@ const BillsView: React.FC<BillsViewProps> = ({ user, handlePayment, addTransacti
         handleCashback(cashbackAmount);
 
         notify("Payment Success", `Your ${service} payment of ₦${paymentAmountNgn.toLocaleString()} was successful.`, "success");
+        // Fix: txId is now correctly recognized as a string
         dispatchSms?.(`WoW INVOICE [${txId.substring(0,8).toUpperCase()}]: ${service.toUpperCase()} successful. Recipient: ${service === 'electricity' ? formData.meter : formData.phone}. Paid ₦${totalCostNgn.toLocaleString()} via ${payWith.code}. ₦${cashbackAmount.toFixed(2)} cashback earned.`);
         
         setFormData(prev => ({...prev, amount: '1000', phone: '', meter: ''}));
@@ -168,7 +183,8 @@ const BillsView: React.FC<BillsViewProps> = ({ user, handlePayment, addTransacti
 
   const renderServiceButton = (type: ServiceType, icon: React.ReactElement, label: string) => (
       <button onClick={() => setService(type)} className={`flex flex-col items-center justify-center p-3 rounded-lg w-full transition-colors ${service === type ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-          {React.cloneElement(icon, { className: 'h-6 w-6 mb-1'})}
+          {/* Fix: Cast icon to React.ReactElement<any> to allow passing className via cloneElement */}
+          {React.cloneElement(icon as React.ReactElement<any>, { className: 'h-6 w-6 mb-1'})}
           <span className="text-xs font-semibold">{label}</span>
       </button>
   );
@@ -202,17 +218,27 @@ const BillsView: React.FC<BillsViewProps> = ({ user, handlePayment, addTransacti
             <div className="pt-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Pay with</label>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {FROM_CURRENCIES.map(c => (
-                        <button key={c.code} type="button" onClick={() => setPayWith(c)} className={`p-2 border rounded-lg text-left ${payWith.code === c.code ? 'border-green-500 ring-2 ring-green-200' : 'border-gray-200'}`}>
-                            <div className="flex items-center">
-                                {c.icon}
-                                <span className="font-semibold ml-2">{c.code}</span>
-                            </div>
-                            <span className="text-sm text-gray-700 font-medium mt-1 block truncate">
-                                Bal: {(user.wallet[c.code] || 0).toLocaleString(undefined, {maximumFractionDigits: 6})}
-                            </span>
-                        </button>
-                    ))}
+                    {FROM_CURRENCIES.map(c => {
+                        const isPi = c.code === 'PI';
+                        const isLocked = isPi && user.kycStatus !== 'verified';
+                        const bal = user.wallet[c.code] || 0;
+                        const spend = isLocked ? Math.max(0, bal - (user.bonusPiAmount || 0)) : bal;
+                        
+                        return (
+                            <button key={c.code} type="button" onClick={() => setPayWith(c)} className={`p-2 border rounded-lg text-left ${payWith.code === c.code ? 'border-green-500 ring-2 ring-green-200' : 'border-gray-200'}`}>
+                                <div className="flex items-center">
+                                    {c.icon}
+                                    <span className="font-semibold ml-2">{c.code}</span>
+                                </div>
+                                <span className="text-[10px] text-gray-700 font-bold mt-1 block truncate">
+                                    Spend: {spend.toLocaleString(undefined, {maximumFractionDigits: 4})}
+                                </span>
+                                {isLocked && (
+                                    <span className="text-[7px] font-black text-orange-500 uppercase">KYC Lock</span>
+                                )}
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
 

@@ -15,7 +15,7 @@ interface AdminDashboardProps {
     user: User;
     allUsers: User[];
     transactions: Transaction[];
-    onApproveKyc: (userId: string) => void;
+    onApproveKyc: (userId: string) => Promise<void>;
     onRejectKyc: (userId: string, reason: string) => void;
     onReleaseTransaction: (txId: string) => void;
     onFreezeTransaction: (txId: string) => void;
@@ -29,6 +29,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     balances, onSettle, user, allUsers, transactions, onApproveKyc, onRejectKyc, onReleaseTransaction, onFreezeTransaction, onDivertTransaction, onSweepFunds, onUnfreezeAsset, onUnlockKyc
 }) => {
     const [activeTab, setActiveTab] = useState<'treasury' | 'liquidity' | 'kyc' | 'vault'>('treasury');
+    const [approvingIds, setApprovingIds] = useState<string[]>([]);
 
     const platformLiquidity = useMemo(() => {
         const totals: Record<string, number> = {};
@@ -41,6 +42,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }, [allUsers]);
 
     const pendingKycUsers = useMemo(() => allUsers.filter(u => u.kycStatus === 'pending'), [allUsers]);
+
+    const handleApprove = async (id: string) => {
+        setApprovingIds(prev => [...prev, id]);
+        await onApproveKyc(id);
+        setApprovingIds(prev => prev.filter(x => x !== id));
+    };
 
     const downloadSystemSnapshot = () => {
         const snapshot = {
@@ -152,59 +159,71 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <p className="text-xs font-black text-gray-400 uppercase tracking-widest">No Pending Applications</p>
                     </div>
                 ) : (
-                    pendingKycUsers.map(u => (
-                        <div key={u.id} className="bg-white border border-gray-100 rounded-[2rem] overflow-hidden shadow-sm">
-                            <div className="p-6 border-b border-gray-50 flex justify-between items-start bg-gray-50/30">
-                                <div>
-                                    <p className="text-lg font-black text-gray-900">@{u.username}</p>
-                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{u.profile?.fullName}</p>
-                                </div>
-                                <span className="bg-orange-100 text-orange-600 text-[8px] font-black px-2 py-1 rounded-full uppercase tracking-widest">Pending Review</span>
-                            </div>
-                            <div className="p-6 grid grid-cols-2 gap-6">
-                                <div className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div>
-                                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Nationality</p>
-                                            <p className="text-xs font-bold">{u.profile?.nationality}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Region</p>
-                                            <p className="text-xs font-bold">{u.profile?.region}</p>
-                                        </div>
-                                    </div>
+                    pendingKycUsers.map(u => {
+                        const isApproving = approvingIds.includes(u.id);
+                        return (
+                            <div key={u.id} className="bg-white border border-gray-100 rounded-[2rem] overflow-hidden shadow-sm">
+                                <div className="p-6 border-b border-gray-50 flex justify-between items-start bg-gray-50/30">
                                     <div>
-                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Bank Link</p>
-                                        <p className="text-xs font-bold">{u.profile?.bankName} - {u.profile?.accountNumber}</p>
+                                        <p className="text-lg font-black text-gray-900">@{u.username}</p>
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{u.profile?.fullName}</p>
                                     </div>
-                                    <div className="flex gap-2">
-                                        <button 
-                                            onClick={() => onApproveKyc(u.id)}
-                                            className="flex-1 bg-green-600 text-white text-[10px] font-black uppercase tracking-widest py-3 rounded-xl shadow-lg shadow-green-500/20 active:scale-95"
-                                        >
-                                            Authorize
-                                        </button>
-                                        <button 
-                                            onClick={() => onRejectKyc(u.id, "Invalid Document Image")}
-                                            className="flex-1 bg-red-600 text-white text-[10px] font-black uppercase tracking-widest py-3 rounded-xl shadow-lg shadow-red-500/20 active:scale-95"
-                                        >
-                                            Decline
-                                        </button>
-                                    </div>
+                                    <span className="bg-orange-100 text-orange-600 text-[8px] font-black px-2 py-1 rounded-full uppercase tracking-widest">Pending Review</span>
                                 </div>
-                                <div className="relative aspect-video bg-gray-900 rounded-2xl overflow-hidden group">
-                                    {u.profile?.idDocument ? (
-                                        <img src={u.profile.idDocument} alt="ID Document" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-gray-500 text-[10px] font-black uppercase tracking-widest">No Image</div>
-                                    )}
-                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                                        <span className="text-[8px] font-black text-white uppercase tracking-widest">Click to Zoom</span>
+                                <div className="p-6 grid grid-cols-2 gap-6">
+                                    <div className="space-y-4">
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Nationality</p>
+                                                <p className="text-xs font-bold">{u.profile?.nationality}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Region</p>
+                                                <p className="text-xs font-bold">{u.profile?.region}</p>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Bank Link</p>
+                                            <p className="text-xs font-bold">{u.profile?.bankName} - {u.profile?.accountNumber}</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button 
+                                                onClick={() => handleApprove(u.id)}
+                                                disabled={isApproving}
+                                                className="flex-[2] bg-green-600 text-white text-[10px] font-black uppercase tracking-widest py-3 rounded-xl shadow-lg shadow-green-500/20 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                                            >
+                                                {isApproving ? (
+                                                    <>
+                                                        <div className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                        <span>PROVISIONING...</span>
+                                                    </>
+                                                ) : (
+                                                    <span>AUTHORIZE & GEN ACCOUNTS</span>
+                                                )}
+                                            </button>
+                                            <button 
+                                                onClick={() => onRejectKyc(u.id, "Invalid Document Image")}
+                                                disabled={isApproving}
+                                                className="flex-1 bg-red-600 text-white text-[10px] font-black uppercase tracking-widest py-3 rounded-xl shadow-lg shadow-red-500/20 active:scale-95 disabled:opacity-50"
+                                            >
+                                                Decline
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="relative aspect-video bg-gray-900 rounded-2xl overflow-hidden group">
+                                        {u.profile?.idDocument ? (
+                                            <img src={u.profile.idDocument} alt="ID Document" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-gray-500 text-[10px] font-black uppercase tracking-widest">No Image</div>
+                                        )}
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                                            <span className="text-[8px] font-black text-white uppercase tracking-widest">Click to Zoom</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    ))
+                        );
+                    })
                 )}
             </div>
         </div>

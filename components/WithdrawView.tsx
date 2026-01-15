@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import type { User, Transaction, Currency } from '../types';
 import { ALL_CURRENCIES, TO_CURRENCIES } from '../constants';
@@ -14,7 +13,8 @@ const PLATFORM_FEE_RATE = 0.015;
 interface WithdrawViewProps {
   user: User;
   handlePayment: (currencyCode: string, netAmount: number, feeAmount: number) => void;
-  addTransaction: (transaction: Omit<Transaction, 'id' | 'date'>) => void;
+  // Fix: Changed return type from void to string because App.tsx addTransaction returns the transaction ID
+  addTransaction: (transaction: Omit<Transaction, 'id' | 'date'>) => string;
   notify: (title: string, message: string, type?: any) => void;
   dispatchSms: (message: string) => void;
 }
@@ -102,6 +102,7 @@ const WithdrawView: React.FC<WithdrawViewProps> = ({ user, handlePayment, addTra
     });
 
     notify("Request Received", `Your withdrawal of ${targetFiat.symbol}${netFiat.toLocaleString()} is pending admin approval.`, "info");
+    // Fix: txId is now correctly recognized as a string
     dispatchSms(`WoW PENDING [${txId.substring(0,8).toUpperCase()}]: Withdrawal request of ₦${netFiat.toLocaleString()} received. Funds are locked in the vault awaiting admin verification.`);
     setIsLoading(false);
     setAmount('');

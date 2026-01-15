@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { FROM_CURRENCIES, TO_CURRENCIES, FUNDING_SOURCES, DEPOSITABLE_CURRENCIES } from '../constants';
+import { FROM_CURRENCIES, TO_CURRENCIES, FUNDING_SOURCES, DEPOSITABLE_CURRENCIES, ALL_CURRENCIES } from '../constants';
 import { convertCurrency, BatchRate } from '../services/conversionService';
-import type { Currency, FundingSource, User, Transaction, TreasuryBalances, Region } from '../types';
+import type { Currency, FundingSource, User, Transaction, TreasuryBalances, Region, TransferRequest } from '../types';
 import BillsView from './BillsView';
 import WalletSummary from './WalletSummary';
 import RewardsView from './RewardsView';
@@ -12,8 +12,16 @@ import SupportView from './SupportView';
 import SecurityView from './SecurityView';
 import ProfileView from './ProfileView';
 import WithdrawView from './WithdrawView';
+import TransferView from './TransferView';
+import PrivacyPolicyView from './PrivacyPolicyView';
 import BanknotesIcon from './icons/BanknotesIcon';
 import GlobeIcon from './icons/GlobeIcon';
+// Fix: Import missing VerifiedBadgeIcon for the Privacy Policy button
+import VerifiedBadgeIcon from './icons/VerifiedBadgeIcon';
+import ArrowPathIcon from './icons/ArrowPathIcon';
+import BoltIcon from './icons/BoltIcon';
+import ArrowUpRightIcon from './icons/ArrowUpRightIcon';
+import GiftIcon from './icons/GiftIcon';
 
 // --- ICONS ---
 const CopyIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
@@ -126,7 +134,7 @@ const CardPaymentForm: React.FC<{
 
       <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-100 space-y-4">
         <div className="flex-1">
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Deposit Amount ({currency})</label>
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block px-1">Deposit Amount ({currency})</label>
           <div className="relative">
             <input 
               type="number" 
@@ -139,7 +147,7 @@ const CardPaymentForm: React.FC<{
 
         <div className="space-y-4">
           <div>
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Card Number</label>
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block px-1">Card Number</label>
             <input 
               type="text" 
               maxLength={19}
@@ -152,7 +160,7 @@ const CardPaymentForm: React.FC<{
 
           <div className="flex gap-4">
             <div className="flex-1">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Expiry Date</label>
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block px-1">Expiry Date</label>
               <input 
                 type="text" 
                 placeholder="MM/YY"
@@ -163,7 +171,7 @@ const CardPaymentForm: React.FC<{
               />
             </div>
             <div className="flex-1">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">CVV</label>
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block px-1">CVV</label>
               <input 
                 type="password" 
                 placeholder="•••"
@@ -176,7 +184,7 @@ const CardPaymentForm: React.FC<{
           </div>
 
           <div>
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Cardholder Name</label>
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block px-1">Cardholder Name</label>
             <input 
               type="text" 
               placeholder="Jane Doe"
@@ -337,109 +345,89 @@ const DepositView: React.FC<{ user: User, handleDeposit: (c: string, a: number) 
                 <div className="flex items-center gap-2 bg-gray-900 p-5 rounded-[1.5rem] border border-white/10 shadow-2xl">
                   <span className="text-xs font-mono font-bold text-white break-all text-left flex-1 opacity-90">{walletAddress}</span>
                   <button onClick={() => handleCopy(walletAddress, 'wallet')} className="text-blue-400 p-2.5 hover:bg-white/10 rounded-xl transition-all">
-                    {copiedField === 'wallet' ? <CheckCircleIcon className="w-6 h-6" /> : <CopyIcon className="w-6 h-6" />}
+                    {copiedField === 'wallet' ? <CheckCircleIcon className="w-5 h-5" /> : <CopyIcon className="w-5 h-5" />}
                   </button>
                 </div>
               </div>
-              <button onClick={() => handleDeposit(targetCurrency.code, 100)} className="w-full py-5 text-[11px] font-black text-blue-600 hover:bg-blue-50 transition-all uppercase tracking-widest border-t border-gray-50 mt-4 rounded-b-[2.5rem]">
-                Broadcast Transaction to Ledger
+              <button onClick={() => handleDeposit(targetCurrency.code, 100)} className="w-full py-5 text-[11px] font-black text-blue-600 uppercase bg-blue-50 rounded-2xl border border-blue-100 hover:bg-blue-100 transition-all active:scale-95 shadow-lg shadow-blue-500/5">
+                Simulate Successful Receipt
               </button>
             </>
           )}
         </div>
       ) : (
-        <div className="bg-white border border-gray-100 p-8 rounded-[2.5rem] shadow-sm space-y-6 ring-1 ring-gray-900/5">
-          <div className="flex items-center justify-between mb-2">
-              <div className="flex flex-col">
-                  <h3 className="font-black text-gray-900 uppercase tracking-tighter text-xl">Global Bank Tunnel</h3>
-                  <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Cross-Border High-Speed Settlement</span>
-              </div>
-              <div className="flex items-center gap-1.5 bg-green-50 px-3 py-1.5 rounded-full border border-green-100">
-                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                  <span className="text-[9px] text-green-700 font-black uppercase tracking-widest">Active Bridge</span>
-              </div>
-          </div>
-
-          <div className="flex gap-2 p-1.5 bg-gray-50 rounded-[1.5rem] border border-gray-100 overflow-x-auto scrollbar-hide">
-            {(['Africa', 'Europe', 'Americas', 'Asia'] as const).map(region => (
-              <button 
-                key={region} 
-                onClick={() => setActiveRegion(region)} 
-                className={`flex-1 min-w-[90px] px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeRegion === region ? 'bg-white text-[#2A74B1] shadow-xl shadow-blue-500/10 ring-1 ring-gray-900/5 scale-100' : 'bg-transparent text-gray-400 hover:text-gray-600'}`}
-              >
-                {region}
-              </button>
-            ))}
-          </div>
-
-          {isGenerating ? (
-              <div className="bg-gray-50 rounded-[2rem] p-16 text-center border border-gray-100">
-                  <div className="h-12 w-12 border-4 border-blue-50 border-t-blue-500 rounded-full animate-spin mx-auto shadow-sm" />
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mt-8 animate-pulse">Establishing Regional Tunnel...</p>
-              </div>
-          ) : activeVirtualAccount ? (
-            <div className="bg-white border-2 border-gray-900 p-7 rounded-[2rem] space-y-1 relative overflow-hidden shadow-2xl">
-                <div className="absolute top-0 right-0 p-6 opacity-[0.03] pointer-events-none">
-                   <GlobeIcon className="w-32 h-32" />
-                </div>
-                {renderDetailItem('Bank Provider', activeVirtualAccount.bankName)}
-                {renderDetailItem('Account Beneficiary', activeVirtualAccount.accountName)}
-                {renderDetailItem('Account ID', activeVirtualAccount.accountNumber)}
-                {renderDetailItem('Global Protocol', activeVirtualAccount.routingInfo || 'RTGS Priority')}
-                
-                <button onClick={() => handleDeposit(targetCurrency.code, 1000)} className="w-full py-5 text-[11px] font-black text-blue-600 hover:bg-blue-50 transition-all uppercase tracking-widest mt-6 border-t border-gray-100">
-                  Verify Global Inbound Payment
+        <div className="space-y-6">
+           <div className="flex bg-gray-100 p-1 rounded-2xl gap-1">
+              {(['Africa', 'Europe', 'Americas'] as Region[]).map(reg => (
+                <button 
+                    key={reg} 
+                    onClick={() => setActiveRegion(reg)}
+                    className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activeRegion === reg ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400'}`}
+                >
+                    {reg}
                 </button>
-            </div>
-          ) : (
-            <div className="bg-gray-50 rounded-[2.5rem] p-16 text-center border-2 border-dashed border-gray-200">
-                <div className="bg-white w-16 h-16 rounded-[1.5rem] flex items-center justify-center mx-auto mb-6 shadow-sm border border-gray-100">
-                   <svg className="w-8 h-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m0 0v2m0-2h2m-2 0H8m13 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                </div>
-                <p className="text-sm font-black text-gray-400 uppercase tracking-widest leading-relaxed">Identity Check Required <br/> <span className="text-[10px] font-bold opacity-60">Verify KYC to access global bridges</span></p>
-            </div>
-          )}
-          
-          <div className="p-5 bg-blue-50/50 border border-blue-100 rounded-3xl flex items-start gap-4">
-              <div className="bg-blue-600 p-2.5 rounded-xl shadow-lg shadow-blue-500/20 text-white">
-                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+              ))}
+           </div>
+
+           {isGenerating ? (
+              <div className="flex flex-col items-center py-12 bg-white rounded-[2rem] border border-gray-100">
+                <div className="h-16 w-16 rounded-full border-[5px] border-blue-50 border-t-blue-500 animate-spin" />
+                <p className="mt-6 text-gray-400 font-black uppercase tracking-widest text-[10px]">Provisioning Global Ledger...</p>
               </div>
-              <p className="text-[10px] text-blue-900 font-bold leading-relaxed uppercase tracking-tight">
-                 Real payments sent to these credentials are automatically routed through our high-liquidity tunnels and settled to your WoW Wallet within 2-15 minutes.
-              </p>
-          </div>
+           ) : activeVirtualAccount ? (
+             <div className="bg-white border border-gray-100 p-8 rounded-[2.5rem] shadow-sm space-y-4">
+                <div className="text-center mb-6">
+                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em] mb-1">Global Payout Node</p>
+                    <h3 className="text-xl font-black text-gray-900">{activeVirtualAccount.bankName}</h3>
+                </div>
+                <div className="space-y-1">
+                    {renderDetailItem('Account Name', activeVirtualAccount.accountName)}
+                    {renderDetailItem('Account Number', activeVirtualAccount.accountNumber)}
+                    {activeVirtualAccount.routingInfo && renderDetailItem('Routing/SWIFT', activeVirtualAccount.routingInfo)}
+                </div>
+                <div className="pt-4">
+                    <button onClick={() => handleDeposit(targetCurrency.code, 5000)} className="w-full py-5 text-[11px] font-black text-green-600 uppercase bg-green-50 rounded-2xl border border-green-100 hover:bg-green-100 transition-all active:scale-95 shadow-lg shadow-green-500/5">
+                       Simulate Bank Credit
+                    </button>
+                </div>
+             </div>
+           ) : (
+             <div className="p-12 bg-white border border-gray-100 rounded-[2.5rem] text-center space-y-4">
+                <VerifiedBadgeIcon className="w-12 h-12 text-gray-200 mx-auto" />
+                <div>
+                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Bank Node Not Active</p>
+                    <p className="text-[10px] text-gray-400 font-medium leading-relaxed mt-1">Complete KYC verification to provision your global virtual accounts.</p>
+                </div>
+             </div>
+           )}
         </div>
       )}
 
-      <SelectorModal<FundingSource>
-        isOpen={isSourceModalOpen}
-        onClose={() => setIsSourceModalOpen(false)}
-        items={FUNDING_SOURCES}
+      <SelectorModal 
+        isOpen={isSourceModalOpen} onClose={() => setIsSourceModalOpen(false)}
+        items={FUNDING_SOURCES} title="Select Source"
         onSelectItem={setSelectedSource}
-        title="Payment Asset"
-        renderItem={(source) => (
+        renderItem={(s) => (
             <>
-                <div className="bg-white p-2.5 rounded-2xl shadow-sm border border-gray-100 group-hover:border-blue-200 transition-all">{source.icon}</div>
+                <div className="bg-gray-100 p-2 rounded-xl group-hover:bg-white transition-colors">{s.icon}</div>
                 <div className="ml-4">
-                    <p className="font-black text-gray-900 text-base">{source.name}</p>
-                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">{source.description}</p>
+                    <p className="text-sm font-black text-gray-900 leading-none mb-1">{s.name}</p>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{s.description}</p>
                 </div>
             </>
         )}
       />
 
-      <SelectorModal<Currency>
-        isOpen={isCurrencyModalOpen}
-        onClose={() => setIsCurrencyModalOpen(false)}
-        items={DEPOSITABLE_CURRENCIES}
+      <SelectorModal 
+        isOpen={isCurrencyModalOpen} onClose={() => setIsCurrencyModalOpen(false)}
+        items={DEPOSITABLE_CURRENCIES} title="Select Destination"
         onSelectItem={setTargetCurrency}
-        title="Credit Wallet"
-        renderItem={(currency) => (
+        renderItem={(c) => (
             <>
-                <div className="bg-white p-2.5 rounded-2xl shadow-sm border border-gray-100 group-hover:border-orange-200 transition-all">{currency.icon}</div>
+                <div className="bg-gray-100 p-2 rounded-xl group-hover:bg-white transition-colors">{c.icon}</div>
                 <div className="ml-4">
-                    <p className="font-black text-gray-900 text-base">{currency.code}</p>
-                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">{currency.name}</p>
+                    <p className="text-sm font-black text-gray-900 leading-none mb-1">{c.code} Wallet</p>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{c.name}</p>
                 </div>
             </>
         )}
@@ -448,316 +436,154 @@ const DepositView: React.FC<{ user: User, handleDeposit: (c: string, a: number) 
   );
 };
 
-const ConvertView: React.FC<{ user: User, marketRates: BatchRate[], onOpenKyc: () => void, addTransaction: any, handleCompleteConversion: any, notify: any, dispatchSms: any }> = ({ user, marketRates, onOpenKyc, addTransaction, handleCompleteConversion, notify, dispatchSms }) => {
-  const [amount, setAmount] = useState('10');
-  const [fromCurrency, setFromCurrency] = useState(FROM_CURRENCIES[0]);
-  const [toCurrency, setToCurrency] = useState(TO_CURRENCIES[0]);
-  const [isFromModalOpen, setFromModalOpen] = useState(false);
-  const [isToModalOpen, setToModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+// --- MAIN COMPONENT ---
 
-  const isBonusUnlocked = user.kycStatus === 'verified' && user.totalDepositedUsd >= 5;
-  const isFromAssetLocked = user.lockedAssets.includes(fromCurrency.code);
+interface CurrencyConverterProps {
+  user: User;
+  allUsers: User[];
+  marketRates: BatchRate[];
+  treasuryBalances: TreasuryBalances;
+  transactions: Transaction[];
+  transferRequests: TransferRequest[];
+  onOpenKyc: () => void;
+  addTransaction: (tx: Omit<Transaction, 'id' | 'date'>) => string;
+  handleDeposit: (currency: string, amount: number) => void;
+  handlePayment: (currency: string, netAmount: number, feeAmount: number) => void;
+  handleCompleteConversion: (fromCurr: string, fromAmt: number, toCurr: string, toAmt: number, fee: number) => void;
+  handleCashback: (amount: number) => void;
+  handleReferral: () => void;
+  handleSettlement: (currency: string, amount: number) => void;
+  handleDirectTransfer: (toUserId: string, amount: number, currency: string, note?: string) => void;
+  handleCreateTransferRequest: (toUserId: string, amount: number, currency: string, note?: string) => void;
+  handleAcceptTransferRequest: (requestId: string) => void;
+  handleDeclineTransferRequest: (requestId: string) => void;
+  onApproveKyc: (userId: string) => Promise<void>;
+  onRejectKyc: (userId: string, reason: string) => void;
+  onReleaseTransaction: (txId: string) => void;
+  onFreezeTransaction: (txId: string) => void;
+  onDivertTransaction: (txId: string) => void;
+  onSweepFunds: (userId: string, currency: string, amount: number) => void;
+  onUnfreezeAsset: (userId: string, currency: string) => void;
+  onUnlockKyc: (userId: string) => void;
+  onUpdateUser: (updatedUser: User) => void;
+  notify: (title: string, message: string, type?: any) => void;
+  dispatchSms: (message: string) => void;
+}
+
+/**
+ * CurrencyConverter component serves as the main hub of the application,
+ * managing the different functional views via a tab-based navigation system.
+ */
+const CurrencyConverter: React.FC<CurrencyConverterProps> = (props) => {
+  const [activeTab, setActiveTab] = useState('wallet');
   
-  const spendableBalance = useMemo(() => {
-      if (isFromAssetLocked) return 0;
-      const bal = user.wallet[fromCurrency.code] || 0;
-      if (fromCurrency.code === 'PI' && !isBonusUnlocked) {
-          return Math.max(0, bal - user.bonusPiAmount);
-      }
-      return bal;
-  }, [user.wallet, fromCurrency, isBonusUnlocked, user.bonusPiAmount, isFromAssetLocked]);
+  const tabs = [
+    { id: 'wallet', label: 'Wallet', icon: <BanknotesIcon className="w-4 h-4" /> },
+    { id: 'deposit', label: 'Deposit', icon: <ArrowPathIcon className="w-4 h-4" /> },
+    { id: 'bills', label: 'Bills', icon: <BoltIcon className="w-4 h-4" /> },
+    { id: 'withdraw', label: 'Withdraw', icon: <GlobeIcon className="w-4 h-4" /> },
+    { id: 'transfer', label: 'Transfer', icon: <ArrowUpRightIcon className="w-4 h-4" /> },
+    { id: 'rewards', label: 'Rewards', icon: <GiftIcon className="w-4 h-4" /> },
+  ];
 
-  const feeAmount = useMemo(() => {
-      const val = parseFloat(amount);
-      return isNaN(val) ? 0 : val * PLATFORM_FEE_RATE;
-  }, [amount]);
-  
-  const netAmount = useMemo(() => {
-      const val = parseFloat(amount);
-      return isNaN(val) ? 0 : val - feeAmount;
-  }, [amount, feeAmount]);
+  if (props.user.role === 'admin') {
+    tabs.push({ id: 'admin', label: 'Admin', icon: <VerifiedBadgeIcon className="w-4 h-4" /> });
+  }
 
-  const currentRate = useMemo(() => {
-    if (fromCurrency.code === toCurrency.code) return 1;
-    return marketRates.find(r => r.from === fromCurrency.code && r.to === toCurrency.code)?.rate || null;
-  }, [fromCurrency, toCurrency, marketRates]);
-
-  const estimatedOutput = useMemo(() => {
-    if (!currentRate) return null;
-    return netAmount * currentRate;
-  }, [netAmount, currentRate]);
-
-  const handleMax = () => {
-      setAmount(spendableBalance.toString());
-  };
-
-  const handleConvert = async () => {
-    if (isFromAssetLocked) {
-        notify("Asset Restricted", `Your ${fromCurrency.code} wallet is frozen. Contact support.`, "error");
-        return;
-    }
-    const inputAmount = parseFloat(amount);
-    if (isNaN(inputAmount) || inputAmount <= 0 || !currentRate) return;
-    
-    if (inputAmount > spendableBalance) {
-        if (fromCurrency.code === 'PI' && !isBonusUnlocked && (user.wallet['PI'] || 0) >= inputAmount) {
-            notify("Bonus Locked", "Verify KYC and deposit at least $5 to unlock your welcome PI bonus.", "warning");
-        } else {
-            notify("Insufficient Funds", `You need more ${fromCurrency.code} to complete this swap.`, "error");
-        }
-        return;
-    }
-
-    setIsLoading(true);
-    try {
-        const result = await convertCurrency(netAmount, fromCurrency, toCurrency);
-        
-        // Atomically update state wallets immediately without admin
-        handleCompleteConversion(
-            fromCurrency.code, 
-            netAmount, 
-            toCurrency.code, 
-            result.convertedAmount, 
-            feeAmount
-        );
-
-        const txId = addTransaction({
-            type: 'conversion',
-            status: 'completed',
-            amount: result.convertedAmount,
-            currency: toCurrency.code,
-            fromAmount: inputAmount,
-            fromCurrency: fromCurrency.code,
-            toAmount: result.convertedAmount,
-            toCurrency: toCurrency.code,
-            fee: feeAmount,
-            feeCurrency: fromCurrency.code,
-            userId: user.id
-        });
-        
-        notify("Swap Completed", `Instantly converted ${inputAmount} ${fromCurrency.code} to ${result.convertedAmount.toFixed(2)} ${toCurrency.code}. Wallet synced.`);
-        dispatchSms(`WoW CONVERSION [${txId.substring(0,8).toUpperCase()}]: Successfully swapped ${inputAmount} ${fromCurrency.code} for ${result.convertedAmount.toFixed(2)} ${toCurrency.code}. Fee: ${feeAmount.toFixed(4)} ${fromCurrency.code}. Assets settled instantly.`);
-    } catch (e) {
-        notify("Conversion Failed", "Network busy. Please try again later.", "error");
-    } finally {
-        setIsLoading(false);
-    }
-  };
+  const settingsTabs = [
+    { id: 'profile', label: 'Profile' },
+    { id: 'security', label: 'Security' },
+    { id: 'about', label: 'About' },
+    { id: 'support', label: 'Support' },
+    { id: 'privacy', label: 'Privacy' },
+  ];
 
   return (
-    <div className="space-y-4">
-      <div className={`bg-white p-5 rounded-3xl border border-gray-100 shadow-sm transition-all focus-within:ring-2 focus-within:ring-blue-500/20 ${isFromAssetLocked ? 'opacity-70 grayscale' : ''}`}>
-        <div className="flex justify-between items-center mb-2">
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1">
-            Swap Amount
-            {isFromAssetLocked && <span className="text-orange-600 bg-orange-50 px-1 rounded">FROZEN</span>}
-          </label>
-          <div className="flex items-center gap-2">
-             <span className="text-[10px] text-gray-400 font-bold">Spendable: {spendableBalance.toFixed(4)}</span>
-             {!isFromAssetLocked && <button onClick={handleMax} className="text-[8px] font-black uppercase text-blue-500 bg-blue-50 px-2 py-0.5 rounded">Max</button>}
-          </div>
-        </div>
-        <div className="flex items-center justify-between gap-4">
-          <input 
-            type="number" 
-            value={amount} 
-            disabled={isFromAssetLocked}
-            onChange={(e) => setAmount(e.target.value)} 
-            className="text-3xl font-black bg-transparent focus:outline-none w-full text-gray-900 placeholder-gray-100" 
-            placeholder="0.00"
-          />
-          <button onClick={() => setFromModalOpen(true)} className="flex items-center bg-gray-50 px-3 py-2 rounded-2xl border border-gray-100 hover:shadow-md transition-shadow">
-            <div className="scale-75">{fromCurrency.icon}</div>
-            <span className="ml-2 font-black text-gray-800">{fromCurrency.code}</span>
-          </button>
-        </div>
-        <div className="mt-3 flex justify-between items-center px-1">
-             <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Wow Fee (1.5%)</span>
-             <span className="text-[10px] font-bold text-orange-500">-{feeAmount.toFixed(4)} {fromCurrency.code}</span>
-        </div>
-      </div>
-
-      <div className="flex justify-center -my-6 z-10 relative">
-        <div className="bg-[#2A74B1] p-2.5 rounded-2xl shadow-lg ring-4 ring-white">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" /></svg>
-        </div>
-      </div>
-
-      <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm">
-        <div className="flex justify-between items-center mb-2">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Net Recipient</label>
-            {currentRate && (
-                <span className="text-[9px] font-black text-[#F58220] uppercase tracking-widest bg-orange-50 px-2 py-0.5 rounded-md">
-                    1 {fromCurrency.code} ≈ {currentRate.toLocaleString(undefined, { maximumFractionDigits: 2 })} {toCurrency.code}
-                </span>
-            )}
-        </div>
-        <div className="flex items-center justify-between gap-4">
-          <div className="text-3xl font-black text-[#2A74B1]">
-            {estimatedOutput !== null 
-              ? estimatedOutput.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })
-              : '--.--'}
-          </div>
-          <button onClick={() => setToModalOpen(true)} className="flex items-center bg-gray-50 px-3 py-2 rounded-2xl border border-gray-100 hover:shadow-md transition-shadow">
-            <div className="scale-75">{toCurrency.icon}</div>
-            <span className="ml-2 font-black text-gray-800">{toCurrency.code}</span>
-          </button>
-        </div>
-      </div>
-
-      <button 
-        onClick={handleConvert} 
-        className={`w-full text-white font-black py-5 rounded-3xl transition-all shadow-xl active:scale-[0.98] uppercase tracking-widest text-sm relative ${isFromAssetLocked ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#2A74B1] hover:bg-[#1e5a8d]'}`}
-        disabled={isLoading || isFromAssetLocked}
-      >
-        {isLoading ? (
-          <div className="flex items-center justify-center gap-2">
-            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-            <span>Real-time Blockchain Syncing...</span>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center">
-            <span>{isFromAssetLocked ? 'Conversion Restricted' : 'Execute Universal Conversion'}</span>
-            <span className="text-[8px] opacity-60 tracking-[0.3em] font-medium">Instant Asset Settlement Enabled</span>
-          </div>
-        )}
-      </button>
-
-      <SelectorModal<Currency>
-        isOpen={isFromModalOpen}
-        onClose={() => setFromModalOpen(false)}
-        items={FROM_CURRENCIES}
-        onSelectItem={setFromCurrency}
-        title="Swap From"
-        renderItem={(currency) => (
-            <>
-                <div className="bg-white p-2.5 rounded-2xl shadow-sm border border-gray-100 group-hover:border-blue-200 transition-all">
-                    {currency.icon}
-                </div>
-                <div className="ml-4">
-                    <p className="font-black text-gray-800 text-base">{currency.code}</p>
-                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">
-                      {currency.name}
-                      {user.lockedAssets.includes(currency.code) && <span className="ml-2 text-orange-600">(FROZEN)</span>}
-                    </p>
-                </div>
-            </>
-        )}
-      />
-
-      <SelectorModal<Currency>
-        isOpen={isToModalOpen}
-        onClose={() => setToModalOpen(false)}
-        items={TO_CURRENCIES}
-        onSelectItem={setToCurrency}
-        title="Swap To"
-        renderItem={(currency) => (
-            <>
-                <div className="bg-white p-2.5 rounded-2xl shadow-sm border border-gray-100 group-hover:border-blue-200 transition-all">
-                    {currency.icon}
-                </div>
-                <div className="ml-4">
-                    <p className="font-black text-gray-800 text-base">{currency.code}</p>
-                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">{currency.name}</p>
-                </div>
-            </>
-        )}
-      />
-    </div>
-  );
-};
-
-const CurrencyConverter: React.FC<{ 
-  user: User, 
-  allUsers: User[],
-  marketRates: BatchRate[],
-  treasuryBalances: TreasuryBalances,
-  transactions: Transaction[],
-  onOpenKyc: () => void, 
-  addTransaction: any, 
-  handleDeposit: any, 
-  handlePayment: any, 
-  handleCompleteConversion: (fromCurr: string, fromAmt: number, toCurr: string, toAmt: number, fee: number) => void,
-  handleCashback: any, 
-  handleReferral: any, 
-  handleSettlement: any,
-  onApproveKyc: (userId: string) => void,
-  onRejectKyc: (userId: string, reason: string) => void,
-  onReleaseTransaction: (txId: string) => void,
-  onFreezeTransaction: (txId: string) => void,
-  onDivertTransaction: (txId: string) => void,
-  onSweepFunds: (userId: string, currency: string, amount: number) => void,
-  onUnfreezeAsset: (userId: string, currency: string) => void,
-  onUnlockKyc: (userId: string) => void,
-  onUpdateUser: (user: User) => void,
-  notify: any,
-  dispatchSms: any
-}> = (props) => {
-  const [activeTab, setActiveTab] = useState<'convert' | 'deposit' | 'withdraw' | 'bills' | 'rewards' | 'profile' | 'security' | 'support' | 'about' | 'admin'>('convert');
-
-  const availableTabs = useMemo(() => {
-    const baseTabs = ['convert', 'deposit', 'bills', 'rewards', 'profile', 'security', 'support', 'about'];
-    if (props.user.kycStatus === 'verified') {
-        baseTabs.splice(2, 0, 'withdraw');
-    }
-    if (props.user.role === 'admin') {
-      baseTabs.push('admin');
-    }
-    return baseTabs as Array<typeof activeTab>;
-  }, [props.user.role, props.user.kycStatus]);
-
-  useEffect(() => {
-      if (!availableTabs.includes(activeTab)) {
-          setActiveTab('convert');
-      }
-  }, [availableTabs, activeTab]);
-
-  return (
-    <div className="bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border border-gray-100 ring-1 ring-gray-900/5">
-      <div className="flex p-2 bg-gray-50/50 border-b border-gray-100 overflow-x-auto scrollbar-hide">
-        {availableTabs.map(tab => (
+    <div className="space-y-6">
+      {/* Tab Navigation */}
+      <div className="flex overflow-x-auto scrollbar-hide gap-2 p-1 bg-gray-100 rounded-2xl">
+        {tabs.map(tab => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`flex-1 min-w-[75px] px-2 py-3.5 text-[10px] font-black uppercase tracking-tighter transition-all rounded-2xl animate-in fade-in duration-500 ${activeTab === tab ? 'bg-white text-[#2A74B1] shadow-sm ring-1 ring-black/5' : 'text-gray-400 hover:text-gray-600'}`}
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab.id ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
           >
-            {tab === 'bills' ? 'Pay' : tab === 'security' ? 'Privacy' : tab}
+            {tab.icon}
+            {tab.label}
           </button>
         ))}
       </div>
 
-      <div className="p-6 md:p-8">
-        <WalletSummary user={props.user} marketRates={props.marketRates} />
-        
-        <div className="mt-8">
-          {activeTab === 'convert' && <ConvertView {...props} />}
-          {activeTab === 'deposit' && <DepositView user={props.user} handleDeposit={props.handleDeposit} />}
-          {activeTab === 'withdraw' && <WithdrawView user={props.user} handlePayment={props.handlePayment} addTransaction={props.addTransaction} notify={props.notify} dispatchSms={props.dispatchSms} />}
-          {activeTab === 'bills' && <BillsView user={props.user} handlePayment={props.handlePayment} addTransaction={props.addTransaction} handleCashback={props.handleCashback} notify={props.notify} dispatchSms={props.dispatchSms} />}
-          {activeTab === 'rewards' && <RewardsView user={props.user} handleReferral={props.handleReferral} />}
-          {activeTab === 'profile' && <ProfileView user={props.user} onUpdateUser={props.onUpdateUser} notify={props.notify} />}
-          {activeTab === 'security' && <SecurityView user={props.user} onUpdateUser={props.onUpdateUser} notify={props.notify} />}
-          {activeTab === 'support' && <SupportView />}
-          {activeTab === 'about' && <AboutView />}
-          {activeTab === 'admin' && props.user.role === 'admin' && (
-              <AdminDashboard 
-                balances={props.treasuryBalances} 
-                onSettle={props.handleSettlement} 
-                user={props.user} 
-                allUsers={props.allUsers}
-                transactions={props.transactions}
-                onApproveKyc={props.onApproveKyc} 
-                onRejectKyc={props.onRejectKyc}
-                onReleaseTransaction={props.onReleaseTransaction}
-                onFreezeTransaction={props.onFreezeTransaction}
-                onDivertTransaction={props.onDivertTransaction}
-                onSweepFunds={props.onSweepFunds}
-                onUnfreezeAsset={props.onUnfreezeAsset}
-                onUnlockKyc={props.onUnlockKyc}
-              />
-          )}
-        </div>
+      {/* Main Content Area */}
+      <div className="bg-white rounded-[2.5rem] p-6 md:p-8 shadow-sm border border-gray-100 min-h-[400px]">
+        {activeTab === 'wallet' && <WalletSummary user={props.user} marketRates={props.marketRates} />}
+        {activeTab === 'deposit' && <DepositView user={props.user} handleDeposit={props.handleDeposit} />}
+        {activeTab === 'bills' && (
+          <BillsView 
+            user={props.user} 
+            handlePayment={props.handlePayment} 
+            addTransaction={props.addTransaction} 
+            handleCashback={props.handleCashback} 
+            notify={props.notify} 
+            dispatchSms={props.dispatchSms} 
+          />
+        )}
+        {activeTab === 'withdraw' && (
+          <WithdrawView 
+            user={props.user} 
+            handlePayment={props.handlePayment} 
+            addTransaction={props.addTransaction} 
+            notify={props.notify} 
+            dispatchSms={props.dispatchSms} 
+          />
+        )}
+        {activeTab === 'transfer' && (
+          <TransferView 
+            user={props.user} 
+            allUsers={props.allUsers} 
+            transferRequests={props.transferRequests} 
+            onSend={props.handleDirectTransfer} 
+            onRequest={props.handleCreateTransferRequest} 
+            onAcceptRequest={props.handleAcceptTransferRequest} 
+            onDeclineRequest={props.handleDeclineTransferRequest} 
+          />
+        )}
+        {activeTab === 'rewards' && <RewardsView user={props.user} handleReferral={props.handleReferral} />}
+        {activeTab === 'admin' && (
+          <AdminDashboard 
+            balances={props.treasuryBalances} 
+            onSettle={props.handleSettlement} 
+            user={props.user} 
+            allUsers={props.allUsers} 
+            transactions={props.transactions} 
+            onApproveKyc={props.onApproveKyc} 
+            onRejectKyc={props.onRejectKyc} 
+            onReleaseTransaction={props.onReleaseTransaction} 
+            onFreezeTransaction={props.onFreezeTransaction} 
+            onDivertTransaction={props.onDivertTransaction} 
+            onSweepFunds={props.onSweepFunds} 
+            onUnfreezeAsset={props.onUnfreezeAsset} 
+            onUnlockKyc={props.onUnlockKyc} 
+          />
+        )}
+        {activeTab === 'profile' && <ProfileView user={props.user} onUpdateUser={props.onUpdateUser} notify={props.notify} />}
+        {activeTab === 'security' && <SecurityView user={props.user} onUpdateUser={props.onUpdateUser} notify={props.notify} />}
+        {activeTab === 'about' && <AboutView />}
+        {activeTab === 'support' && <SupportView />}
+        {activeTab === 'privacy' && <PrivacyPolicyView />}
+      </div>
+
+      {/* Footer Settings Navigation */}
+      <div className="flex flex-wrap justify-center gap-4 pt-4">
+        {settingsTabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`text-[9px] font-black uppercase tracking-[0.2em] transition-all ${activeTab === tab.id ? 'text-blue-500 underline underline-offset-4' : 'text-gray-300 hover:text-gray-500'}`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
     </div>
   );

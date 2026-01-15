@@ -76,10 +76,11 @@ export interface AppNotification {
     type: NotificationType;
     timestamp: Date;
     read: boolean;
+    targetUserId?: string; // Added to enable notification filtering per user node
 }
 
 // --- TRANSACTIONS ---
-export type TransactionType = 'conversion' | 'deposit' | 'bill_payment' | 'cashback' | 'referral_bonus' | 'settlement' | 'withdrawal';
+export type TransactionType = 'conversion' | 'deposit' | 'bill_payment' | 'cashback' | 'referral_bonus' | 'settlement' | 'withdrawal' | 'transfer_send' | 'transfer_receive' | 'payment_request';
 export type TransactionStatus = 'completed' | 'pending' | 'failed';
 
 export interface Transaction {
@@ -97,11 +98,23 @@ export interface Transaction {
     fromCurrency?: string;
     toAmount?: number;
     toCurrency?: string;
-    // For bill payments / withdrawals
+    // For bill payments / withdrawals / transfers
     service?: string; // e.g., 'Airtime', 'Data', 'Electricity', 'Bank Payout'
-    recipient?: string; // Phone number or meter number or Bank Account
+    recipient?: string; // Phone number or meter number or Bank Account or Username
     costInCrypto?: number;
     cryptoUsed?: string;
+    note?: string;
+}
+
+export interface TransferRequest {
+    id: string;
+    fromUserId: string; // The person requesting the money
+    toUserId: string;   // The person asked to pay
+    amount: number;
+    currency: string;
+    status: 'pending' | 'accepted' | 'declined';
+    timestamp: Date;
+    note?: string;
 }
 
 export interface TreasuryBalances {

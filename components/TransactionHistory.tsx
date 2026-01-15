@@ -13,6 +13,7 @@ interface TransactionHistoryProps {
   onResendInvoice?: (tx: Transaction) => void;
 }
 
+// Fix: Added missing transaction types to ICONS mapping to satisfy Record<TransactionType, React.ReactElement> requirement.
 const ICONS: Record<Transaction['type'], React.ReactElement> = {
     deposit: <ArrowDownLeftIcon className="h-6 w-6 text-green-500" />,
     conversion: <ArrowPathIcon className="h-6 w-6 text-blue-500" />,
@@ -21,6 +22,9 @@ const ICONS: Record<Transaction['type'], React.ReactElement> = {
     referral_bonus: <UserPlusIcon className="h-6 w-6 text-purple-500" />,
     settlement: <BanknotesIcon className="h-6 w-6 text-gray-800" />,
     withdrawal: <ArrowUpRightIcon className="h-6 w-6 text-orange-500" />,
+    transfer_send: <ArrowUpRightIcon className="h-6 w-6 text-blue-600" />,
+    transfer_receive: <ArrowDownLeftIcon className="h-6 w-6 text-green-600" />,
+    payment_request: <ArrowPathIcon className="h-6 w-6 text-orange-400" />,
 };
 
 const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, onResendInvoice }) => {
@@ -99,6 +103,30 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, o
                         <p className="text-sm text-gray-500">Welcome bonus!</p>
                     </div>
                 );
+            // Fix: Added cases for missing transaction types in details renderer.
+            case 'transfer_send':
+                return (
+                    <div>
+                        <p className="font-semibold text-gray-800">Transfer Sent</p>
+                        <p className="text-sm text-gray-500">To @{tx.recipient}</p>
+                        {tx.note && <p className="text-[10px] text-gray-400 italic">"{tx.note}"</p>}
+                    </div>
+                );
+            case 'transfer_receive':
+                return (
+                    <div>
+                        <p className="font-semibold text-gray-800">Transfer Received</p>
+                        <p className="text-sm text-gray-500">From @{tx.recipient}</p>
+                        {tx.note && <p className="text-[10px] text-gray-400 italic">"{tx.note}"</p>}
+                    </div>
+                );
+            case 'payment_request':
+                return (
+                    <div>
+                        <p className="font-semibold text-gray-800">Payment Request</p>
+                        <p className="text-sm text-gray-500">Request to @{tx.recipient}</p>
+                    </div>
+                );
             default:
                 return null;
         }
@@ -121,6 +149,13 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({ transactions, o
                  return <span className={`text-yellow-600 font-semibold ${baseClass}`}>{`+ ₦${tx.amount.toLocaleString()}`}</span>;
             case 'referral_bonus':
                  return <span className={`text-purple-600 font-semibold ${baseClass}`}>{`+ ₦${tx.amount.toLocaleString()}`}</span>;
+            // Fix: Added cases for missing transaction types in amount renderer.
+            case 'transfer_send':
+                return <span className={`text-red-600 font-semibold ${baseClass}`}>{`- ${tx.amount.toLocaleString()} ${tx.currency}`}</span>;
+            case 'transfer_receive':
+                return <span className={`text-green-600 font-semibold ${baseClass}`}>{`+ ${tx.amount.toLocaleString()} ${tx.currency}`}</span>;
+            case 'payment_request':
+                return <span className={`text-orange-600 font-semibold ${baseClass}`}>{`${tx.amount.toLocaleString()} ${tx.currency}`}</span>;
             default:
                 return null;
         }

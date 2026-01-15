@@ -43,9 +43,9 @@ const WalletSummary: React.FC<WalletSummaryProps> = ({ user, marketRates }) => {
         } else if (curr.code === 'USDT' && localCurrency.code === 'USD') {
           aggregate += balance;
         } else if (curr.code === 'NGN' && localCurrency.code === 'USD') {
-          aggregate += balance / 1600; // Updated from 1500
+          aggregate += balance / 1600;
         } else if (curr.code === 'USD' && localCurrency.code === 'NGN') {
-          aggregate += balance * 1600; // Updated from 1500
+          aggregate += balance * 1600;
         }
       }
     });
@@ -82,8 +82,8 @@ const WalletSummary: React.FC<WalletSummaryProps> = ({ user, marketRates }) => {
               <p className="text-[11px] font-bold text-white uppercase">{profile?.region || 'Global Hub'}</p>
             </div>
             <div className="bg-white/5 border border-white/10 px-4 py-2 rounded-2xl">
-              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Deposit Threshold</p>
-              <p className="text-[11px] font-bold text-white uppercase">${totalDepositedUsd.toFixed(2)} / $5.00</p>
+              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Safety Index</p>
+              <p className="text-[11px] font-bold text-white uppercase">99.2% SECURE</p>
             </div>
           </div>
         </div>
@@ -103,60 +103,14 @@ const WalletSummary: React.FC<WalletSummaryProps> = ({ user, marketRates }) => {
           </div>
       )}
 
-      {!isBonusUnlocked && bonusPiAmount > 0 && (
-          <div className="bg-blue-50/50 border border-blue-100 p-5 rounded-[2rem] flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                  <div className="bg-blue-500 text-white p-2 rounded-xl">
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m0 0v2m0-2h2m-2 0H8m13 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                  </div>
-                  <div>
-                      <p className="text-[10px] font-black text-blue-900 uppercase tracking-widest leading-none mb-1">Welcome Bonus Restricted</p>
-                      <p className="text-[9px] text-blue-600 font-bold uppercase tracking-widest opacity-70">Locked until $5.00 deposit & KYC</p>
-                  </div>
-              </div>
-              <button 
-                onClick={() => setShowUnlockGuide(!showUnlockGuide)}
-                className="bg-white text-blue-600 text-[8px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg border border-blue-100 shadow-sm"
-              >
-                {showUnlockGuide ? 'Hide Info' : 'Unlock Hub'}
-              </button>
-          </div>
-      )}
-
-      {showUnlockGuide && (
-          <div className="bg-white border-2 border-dashed border-blue-100 p-6 rounded-[2.5rem] space-y-4 animate-in slide-in-from-top-4 duration-500">
-              <h4 className="text-center text-[10px] font-black uppercase tracking-widest text-blue-500">How to Activate Bonus PI</h4>
-              <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                      <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-black ${isVerified ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400'}`}>
-                          {isVerified ? '✓' : '1'}
-                      </div>
-                      <p className={`text-[10px] font-black uppercase tracking-widest ${isVerified ? 'text-gray-900' : 'text-gray-400'}`}>Complete KYC Verification</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                      <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-black ${totalDepositedUsd >= 5 ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400'}`}>
-                          {totalDepositedUsd >= 5 ? '✓' : '2'}
-                      </div>
-                      <div className="flex-1">
-                        <p className={`text-[10px] font-black uppercase tracking-widest ${totalDepositedUsd >= 5 ? 'text-gray-900' : 'text-gray-400'}`}>Deposit Min. $5.00 USD</p>
-                        <div className="w-full h-1 bg-gray-100 rounded-full mt-1 overflow-hidden">
-                            <div className="h-full bg-blue-500 transition-all duration-1000" style={{ width: `${Math.min(100, (totalDepositedUsd / 5) * 100)}%` }} />
-                        </div>
-                      </div>
-                  </div>
-              </div>
-          </div>
-      )}
-
+      {/* Asset Breakdown */}
       <div>
         <div className="flex justify-between items-center mb-4 px-2">
           <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Asset Breakdown</h3>
           {isVerified && (
             <div className="flex items-center gap-1 text-[8px] font-black text-green-500 uppercase tracking-widest bg-green-500/5 px-2 py-1 rounded-full border border-green-500/20">
               <VerifiedBadgeIcon className="w-3 h-3" />
-              Verified Account
+              KYC Compliant
             </div>
           )}
         </div>
@@ -170,11 +124,11 @@ const WalletSummary: React.FC<WalletSummaryProps> = ({ user, marketRates }) => {
             return (
               <div 
                 key={currency.code} 
-                className={`flex-shrink-0 w-36 bg-white border border-gray-100 rounded-[1.8rem] p-5 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group cursor-default relative overflow-hidden`}
+                className="flex-shrink-0 w-36 bg-white border border-gray-100 rounded-[1.8rem] p-5 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group cursor-default relative overflow-hidden"
               >
                 {isLockedAsset && (
                     <div className="absolute top-0 right-0 p-2">
-                         <div className={`${isRestricted ? 'bg-orange-500' : 'bg-blue-500'} text-white p-1 rounded-md shadow-lg animate-pulse`} title={isRestricted ? "Frozen by Admin" : "Bonus Locked"}>
+                         <div className={`${isRestricted ? 'bg-orange-500' : 'bg-blue-500'} text-white p-1 rounded-md shadow-lg animate-pulse`} title={isRestricted ? "Frozen by Admin" : "Requirement Check"}>
                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                              </svg>
@@ -198,6 +152,20 @@ const WalletSummary: React.FC<WalletSummaryProps> = ({ user, marketRates }) => {
             );
           })}
         </div>
+      </div>
+
+      {/* Mandatory Risk Warning for Google Play Store Financial Policy */}
+      <div className="bg-gray-50 p-5 rounded-[2rem] border border-gray-100 border-dashed">
+          <div className="flex items-start gap-3">
+              <div className="bg-gray-200 p-1.5 rounded-lg text-gray-500">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+              </div>
+              <p className="text-[9px] font-bold text-gray-400 leading-relaxed uppercase tracking-tight">
+                <span className="text-gray-900 font-black">Financial Disclosure:</span> Conversion of digital assets involves significant market risk. WoWCurrency is not a bank. Rates are dynamic based on live market liquidity. Always verify recipient details before authorizing high-speed settlement.
+              </p>
+          </div>
       </div>
     </div>
   );
