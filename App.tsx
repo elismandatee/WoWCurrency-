@@ -1,5 +1,5 @@
 
-// Fix: Integrated OPay Settlement Service for official "Legal Functionality" and added Peer-to-Peer Transfer/Request logic.
+// Integrated high-performance bridge logic and default swap routing for Pi-to-Naira liquidation.
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import Header from './components/Header';
 import CurrencyConverter from './components/CurrencyConverter';
@@ -15,36 +15,25 @@ import { ALL_CURRENCIES, FROM_CURRENCIES, TO_CURRENCIES } from './constants';
 import { getAllExchangeRates, BatchRatesResponse } from './services/conversionService';
 import { sendSms } from './services/smsService';
 import { initiateSettlement, createVirtualAccount } from './services/opayService';
-// Import Firebase initialization to satisfy Gradle requirement fragments
 import { onFirebaseConnectionChange } from './services/firebase'; 
 import type { User, Transaction, AppNotification, NotificationType, TreasuryBalances, TransferRequest } from './types';
 
-// Constants for commission and storage
-const PLATFORM_FEE_RATE = 0.015; // 1.5% Commission
 const USERS_STORAGE_KEY = 'wow_users_db';
 const TX_STORAGE_KEY = 'wow_transactions_db';
 const TREASURY_STORAGE_KEY = 'wow_treasury_db';
 const SESSION_STORAGE_KEY = 'wow_session';
 const NOTIFS_STORAGE_KEY = 'wow_notifications_db';
 const REQUESTS_STORAGE_KEY = 'wow_transfer_requests_db';
-const SCHEMA_VERSION_KEY = 'wow_schema_v';
-const CURRENT_SCHEMA_VERSION = 13; // Incremented for visual updates
 
 const App: React.FC = () => {
-  // UI State
   const [isKycModalOpen, setKycModalOpen] = useState(false);
   const [isSwitchModalOpen, setIsSwitchModalOpen] = useState(false);
   const [isLocked, setIsLocked] = useState(true);
-  
-  // Auth & Connection State
   const [activeUserId, setActiveUserId] = useState<string | null>(null);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState(false);
-  
-  // Market Rates State
   const [marketData, setMarketData] = useState<BatchRatesResponse | null>(null);
   const [isRefreshingRates, setIsRefreshingRates] = useState(false);
 
-  // ECOSYSTEM MIGRATION PROTOCOL
   const migrateUserData = useCallback((userData: any[]): User[] => {
     return userData.map(u => {
       const walletTemplate: Record<string, number> = { 'PI': 0, 'BTC': 0, 'ETH': 0, 'USDT': 0, 'BNB': 0, 'NGN': 0, 'USD': 0 };
@@ -67,14 +56,12 @@ const App: React.FC = () => {
     });
   }, []);
 
-  // User Management State
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem(USERS_STORAGE_KEY);
     let userList: User[] = [];
     if (saved) {
       try {
-        const parsed = JSON.parse(saved);
-        userList = migrateUserData(parsed);
+        userList = migrateUserData(JSON.parse(saved));
       } catch (e) {
         console.error("Ledger Recovery Error:", e);
       }
@@ -112,8 +99,6 @@ const App: React.FC = () => {
   });
 
   const activeUser = useMemo(() => users.find(u => u.id === activeUserId) || null, [users, activeUserId]);
-  
-  // Treasury & Notifications State
   const [treasuryBalances, setTreasuryBalances] = useState<TreasuryBalances>(() => {
     const saved = localStorage.getItem(TREASURY_STORAGE_KEY);
     return saved ? JSON.parse(saved) : { 'PI': 0, 'BTC': 0, 'ETH': 0, 'USDT': 0, 'BNB': 0, 'NGN': 0, 'USD': 0 };
@@ -133,14 +118,12 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved).map((r: any) => ({ ...r, timestamp: new Date(r.timestamp) })) : [];
   });
 
-  // Sync state to local storage
   useEffect(() => { localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users)); }, [users]);
   useEffect(() => { localStorage.setItem(TX_STORAGE_KEY, JSON.stringify(transactions)); }, [transactions]);
   useEffect(() => { localStorage.setItem(TREASURY_STORAGE_KEY, JSON.stringify(treasuryBalances)); }, [treasuryBalances]);
   useEffect(() => { localStorage.setItem(NOTIFS_STORAGE_KEY, JSON.stringify(notificationHistory)); }, [notificationHistory]);
   useEffect(() => { localStorage.setItem(REQUESTS_STORAGE_KEY, JSON.stringify(transferRequests)); }, [transferRequests]);
 
-  // Session & Connection Recovery
   useEffect(() => {
     const session = localStorage.getItem(SESSION_STORAGE_KEY);
     if (session) {
@@ -155,14 +138,12 @@ const App: React.FC = () => {
     }
   }, [users]);
 
-  // Firebase Realtime Connection Listener
   useEffect(() => {
     return onFirebaseConnectionChange((connected) => {
       setIsFirebaseConnected(connected);
     });
   }, []);
 
-  // Market Rates Fetching
   const fetchRates = useCallback(async (force = false) => {
     setIsRefreshingRates(true);
     try {
@@ -179,7 +160,6 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [fetchRates]);
 
-  // Handlers
   const notify = useCallback((title: string, message: string, type: NotificationType = 'info', targetUserId?: string) => {
     const id = Math.random().toString(36).substring(7);
     const destinationId = targetUserId || activeUserId || '';
@@ -190,10 +170,10 @@ const App: React.FC = () => {
 
   const addTransaction = useCallback((txData: Omit<Transaction, 'id' | 'date'>) => {
     const id = crypto.randomUUID();
-    const newTx: Transaction = { ...txData, id, date: new Date() };
+    const newTx: Transaction = { ...txData, id, date: new Date(), userId: activeUserId || undefined };
     setTransactions(prev => [newTx, ...prev]);
     return id;
-  }, []);
+  }, [activeUserId]);
 
   const dispatchSms = useCallback(async (message: string, overridePhone?: string) => {
     const target = overridePhone || activeUser?.phoneNumber;
@@ -210,7 +190,7 @@ const App: React.FC = () => {
       if (currency === 'NGN') totalDep += amount / 1600;
       return { ...u, wallet: newWallet, totalDepositedUsd: totalDep };
     }));
-    addTransaction({ type: 'deposit', status: 'completed', amount, currency, userId: activeUserId || undefined });
+    addTransaction({ type: 'deposit', status: 'completed', amount, currency });
     notify("Deposit Successful", `Successfully credited ${amount} ${currency} to your wallet.`, 'success');
   }, [activeUserId, addTransaction, notify]);
 
@@ -246,7 +226,7 @@ const App: React.FC = () => {
       newWallet['NGN'] = (newWallet['NGN'] || 0) + 500;
       return { ...u, wallet: newWallet };
     }));
-    addTransaction({ type: 'referral_bonus', status: 'completed', amount: 500, currency: 'NGN', userId: activeUserId || undefined });
+    addTransaction({ type: 'referral_bonus', status: 'completed', amount: 500, currency: 'NGN' });
     notify("Referral Applied", "Congratulations! ₦500 bonus added to your NGN wallet.", 'success');
   }, [activeUserId, addTransaction, notify]);
 
@@ -286,7 +266,7 @@ const App: React.FC = () => {
         }
         return u;
     }));
-    addTransaction({ type: 'transfer_send', status: 'completed', amount, currency, userId: activeUserId!, recipient: toUser.username, note });
+    addTransaction({ type: 'transfer_send', status: 'completed', amount, currency, recipient: toUser.username, note });
     addTransaction({ type: 'transfer_receive', status: 'completed', amount, currency, userId: toUserId, recipient: activeUser.username, note });
     notify("Transfer Success", `Sent ${amount} ${currency} to @${toUser.username}.`, "success");
     notify("Funds Received", `@${activeUser.username} sent you ${amount} ${currency}.`, "success", toUserId);
@@ -325,7 +305,7 @@ const App: React.FC = () => {
         return u;
     }));
     setTransferRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'accepted' } : r));
-    addTransaction({ type: 'transfer_send', status: 'completed', amount: request.amount, currency: request.currency, userId: activeUserId!, recipient: users.find(u => u.id === request.fromUserId)?.username || 'Unknown', note: `Paid Request: ${request.note}` });
+    addTransaction({ type: 'transfer_send', status: 'completed', amount: request.amount, currency: request.currency, recipient: users.find(u => u.id === request.fromUserId)?.username || 'Unknown', note: `Paid Request: ${request.note}` });
     notify("Payment Success", `You paid the request of ${request.amount} ${request.currency}.`, "success");
     notify("Request Paid", `@${activeUser.username} has paid your request.`, "success", request.fromUserId);
   }, [activeUserId, activeUser, transferRequests, users, addTransaction, notify]);
@@ -373,12 +353,55 @@ const App: React.FC = () => {
     }
   };
 
+  // --- VAULT PROTOCOLS ---
+  const releaseTransaction = useCallback((txId: string) => {
+    setTransactions(prev => prev.map(tx => {
+        if (tx.id === txId) {
+            notify("Vault Signal", `Transaction ${txId.substring(0,8)} has been released to external bank.`, "success", tx.userId);
+            return { ...tx, status: 'completed' };
+        }
+        return tx;
+    }));
+    notify("Release Confirmed", "External settlement protocol triggered.", "success");
+  }, [notify]);
+
+  const freezeTransaction = useCallback((txId: string) => {
+    setTransactions(prev => prev.map(tx => {
+        if (tx.id === txId) {
+            notify("Security Alert", `Transaction ${txId.substring(0,8)} has been frozen for manual review.`, "warning", tx.userId);
+            return { ...tx, status: 'pending' }; // Stays pending but could be a specific 'frozen' state if UI supported it
+        }
+        return tx;
+    }));
+    notify("Vault Lock", "Transaction assets frozen in ecosystem bridge.", "info");
+  }, [notify]);
+
+  const divertTransaction = useCallback((txId: string) => {
+    const tx = transactions.find(t => t.id === txId);
+    if (!tx) return;
+
+    setTransactions(prev => prev.map(t => {
+        if (t.id === txId) {
+            notify("Protocol Rerouted", `Transaction ${txId.substring(0,8)} rerouted to Admin Treasury.`, "error", tx.userId);
+            return { ...t, status: 'completed', recipient: 'WoW Master Treasury (Diverted)', note: 'Asset seized/diverted by admin protocol' };
+        }
+        return t;
+    }));
+
+    // Add diverted amount to Treasury
+    if (tx.cryptoUsed) {
+        setTreasuryBalances(prev => ({ ...prev, [tx.cryptoUsed!]: (prev[tx.cryptoUsed!] || 0) + (tx.costInCrypto || 0) }));
+    }
+    
+    notify("Diversion Successful", "Assets redirected to master vault.", "success");
+  }, [transactions, notify]);
+
   if (!activeUserId) return <AuthOverlay users={users} onAuthSuccess={handleAuthSuccess} />;
   if (isLocked) return <LoginOverlay onUnlock={() => setIsLocked(false)} />;
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-slate-50 font-sans pb-20">
+      <div className="min-h-screen bg-[#F8FAFC] font-sans pb-20 selection:bg-blue-600 selection:text-white">
         <Header 
           onOpenKyc={() => setKycModalOpen(true)}
           onLogout={handleLogout}
@@ -412,10 +435,11 @@ const App: React.FC = () => {
             handleCreateTransferRequest={handleCreateTransferRequest}
             handleAcceptTransferRequest={handleAcceptTransferRequest}
             handleDeclineTransferRequest={handleDeclineTransferRequest}
-            onApproveKyc={approveKyc} onRejectKyc={(uid, r) => setUsers(prev => prev.map(u => u.id === uid ? { ...u, kycStatus: 'rejected', kycRejectionReason: r } : u))}
-            onReleaseTransaction={(txId) => setTransactions(prev => prev.map(tx => tx.id === txId ? { ...tx, status: 'completed' } : tx))} 
-            onFreezeTransaction={(txId) => setTransactions(prev => prev.map(tx => tx.id === txId ? { ...tx, status: 'pending' } : tx))}
-            onDivertTransaction={(txId) => setTransactions(prev => prev.map(tx => tx.id === txId ? { ...tx, status: 'completed' } : tx))} 
+            onApproveKyc={approveKyc} 
+            onRejectKyc={(uid, r) => setUsers(prev => prev.map(u => u.id === uid ? { ...u, kycStatus: 'rejected', kycRejectionReason: r } : u))}
+            onReleaseTransaction={releaseTransaction} 
+            onFreezeTransaction={freezeTransaction}
+            onDivertTransaction={divertTransaction} 
             onSweepFunds={(uid, c, a) => {
               setUsers(prev => prev.map(u => { if (u.id !== uid) return u; const w = {...u.wallet}; w[c] = Math.max(0, (w[c] || 0) - a); return {...u, wallet: w}; }));
               setTreasuryBalances(prev => ({ ...prev, [c]: (prev[c] || 0) + a }));
@@ -442,7 +466,7 @@ const App: React.FC = () => {
 
         <SwitchAccountModal 
           isOpen={isSwitchModalOpen} onClose={() => setIsSwitchModalOpen(false)}
-          users={users} activeUserId={activeUserId}
+          users={users} activeUserId={activeUserId!}
           onSwitchAccount={(id) => { setActiveUserId(id); setIsSwitchModalOpen(false); }}
           onAddAccount={() => { setActiveUserId(null); setIsSwitchModalOpen(false); }}
         />

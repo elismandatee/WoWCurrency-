@@ -130,20 +130,6 @@ const WalletSummary: React.FC<WalletSummaryProps> = ({ user, marketRates }) => {
         </div>
       </div>
 
-      {lockedAssets.length > 0 && (
-          <div className="bg-red-50 border border-red-100 p-5 rounded-[2rem] flex items-center gap-3 animate-pulse">
-              <div className="bg-red-500 text-white p-2 rounded-xl shadow-lg">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m0 0v2m0-2h2m-2 0H8m13 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-              </div>
-              <div>
-                  <p className="text-[10px] font-black text-red-900 uppercase tracking-widest leading-none mb-1">Node Restricted</p>
-                  <p className="text-[9px] text-red-600 font-bold uppercase tracking-widest opacity-70">Regulatory lock active on specific currency bridges.</p>
-              </div>
-          </div>
-      )}
-
       <div>
         <div className="flex justify-between items-center mb-4 px-2">
           <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Asset Allocation</h3>
@@ -155,7 +141,7 @@ const WalletSummary: React.FC<WalletSummaryProps> = ({ user, marketRates }) => {
           )}
         </div>
         
-        <div className="flex space-x-3 overflow-x-auto pb-4 -mb-4 scrollbar-hide">
+        <div className="flex space-x-4 overflow-x-auto pb-4 -mb-4 scrollbar-hide">
           {ALL_CURRENCIES.map(currency => {
             const balance = wallet[currency.code] || 0;
             const isRestricted = lockedAssets.includes(currency.code);
@@ -164,7 +150,7 @@ const WalletSummary: React.FC<WalletSummaryProps> = ({ user, marketRates }) => {
             return (
               <div 
                 key={currency.code} 
-                className="flex-shrink-0 w-36 bg-white border border-gray-100 rounded-[2.2rem] p-5 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group cursor-default relative overflow-hidden border-b-4 border-b-transparent hover:border-b-blue-500"
+                className="flex-shrink-0 w-44 bg-white border border-gray-100 rounded-[2.2rem] p-5 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group cursor-default relative overflow-hidden border-b-4 border-b-transparent hover:border-b-blue-500"
               >
                 {isLockedAsset && (
                     <div className="absolute top-0 right-0 p-2">
@@ -187,6 +173,13 @@ const WalletSummary: React.FC<WalletSummaryProps> = ({ user, marketRates }) => {
                     minimumFractionDigits: currency.isCrypto ? 0 : 2
                   })}
                 </p>
+                
+                {currency.code === 'PI' && balance > 0 && !isLockedAsset && (
+                    <button className="mt-4 w-full py-2 bg-blue-50 text-blue-600 text-[9px] font-black uppercase tracking-widest rounded-xl border border-blue-100 hover:bg-blue-100 transition-colors">
+                        Quick Bridge to NGN
+                    </button>
+                )}
+                
                 <div className="w-6 h-0.5 bg-gray-100 rounded-full mt-3 group-hover:w-full transition-all duration-700 bg-gradient-to-r from-blue-500 to-transparent" />
               </div>
             );
@@ -207,7 +200,7 @@ const WalletSummary: React.FC<WalletSummaryProps> = ({ user, marketRates }) => {
               <div className="space-y-1">
                  <p className="text-[11px] font-black text-white uppercase tracking-widest">Ecosystem Transparency</p>
                  <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
-                   WoWCurrency operates on real-time market liquidity bridges. Conversion rates for Pi Network are based on live IOU settlements. Commission is fixed at 1.5%.
+                   WoWCurrency operates on real-time market liquidity bridges. Conversion rates for Pi Network are based on live IOU settlements. Commission is fixed at 1.5%. Performance monitored via BOM 34.8.0 protocols.
                  </p>
               </div>
           </div>

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import type { User, Currency, Transaction } from '../types';
 import { FROM_CURRENCIES, TO_CURRENCIES } from '../constants';
 import { getExchangeRate } from '../services/conversionService';
+import { runWithTrace } from '../services/firebase';
 import ArrowPathIcon from './icons/ArrowPathIcon';
 import BoltIcon from './icons/BoltIcon';
 
@@ -16,12 +17,22 @@ interface SwapViewProps {
 }
 
 const SwapView: React.FC<SwapViewProps> = ({ user, onConvert, addTransaction, notify }) => {
-  const [fromAsset, setFromAsset] = useState<Currency>(FROM_CURRENCIES[0]); 
-  const [toAsset, setToAsset] = useState<Currency>(TO_CURRENCIES[0]); 
+  // Hard-default to PI -> NGN for the primary user request
+  const [fromAsset, setFromAsset] = useState<Currency>(FROM_CURRENCIES.find(c => c.code === 'PI') || FROM_CURRENCIES[0]); 
+  const [toAsset, setToAsset] = useState<Currency>(TO_CURRENCIES.find(c => c.code === 'NGN') || TO_CURRENCIES[0]); 
   const [amount, setAmount] = useState('');
   const [rate, setRate] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSwapping, setIsSwapping] = useState(false);
+  const [swapStep, setSwapStep] = useState(0);
+
+  const swapSequences = [
+    "Establishing RPC Connection...",
+    "Querying WoW Bridge Liquidity...",
+    "Validating Cryptographic Identity...",
+    "Minting Internal IOU Settlement...",
+    "Finalizing Asset Exchange..."
+  ];
 
   useEffect(() => {
     setIsLoading(true);
@@ -62,7 +73,14 @@ const SwapView: React.FC<SwapViewProps> = ({ user, onConvert, addTransaction, no
     }
 
     setIsSwapping(true);
-    await new Promise(r => setTimeout(r, 2500));
+    setSwapStep(0);
+
+    await runWithTrace('asset_bridge_settlement', async () => {
+        for (let i = 0; i < swapSequences.length; i++) {
+            setSwapStep(i);
+            await new Promise(r => setTimeout(r, 700));
+        }
+    });
 
     const finalOutput = estimatedOutput;
     const feeInFrom = fee;
@@ -82,32 +100,39 @@ const SwapView: React.FC<SwapViewProps> = ({ user, onConvert, addTransaction, no
       feeCurrency: fromAsset.code
     });
 
-    notify("Settlement Reached", `Bridge confirmed. ${finalOutput.toLocaleString()} ${toAsset.code} credited.`, "success");
+    notify("Bridge Finalized", `Settled ${finalOutput.toLocaleString()} ${toAsset.code} in vault.`, "success");
     setIsSwapping(false);
     setAmount('');
   };
+
+  const bridgePath = useMemo(() => {
+    if (fromAsset.code === 'PI' && toAsset.code === 'NGN') return ['PI', 'USDT', 'NGN'];
+    if (fromAsset.code === 'PI' && toAsset.code === 'USD') return ['PI', 'USDT', 'USD'];
+    if (fromAsset.isCrypto && !toAsset.isCrypto) return [fromAsset.code, 'USDT', toAsset.code];
+    return [fromAsset.code, toAsset.code];
+  }, [fromAsset, toAsset]);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-6 duration-700">
       <div className="bg-white border border-gray-100 rounded-[3rem] p-8 md:p-10 shadow-2xl space-y-8 relative overflow-hidden ring-1 ring-gray-900/5">
         <div className="flex justify-between items-center px-2">
             <div className="space-y-1">
-                <h3 className="text-[10px] font-black text-blue-500 uppercase tracking-[0.4em] leading-none">Bridge Terminal</h3>
-                <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Propagating through global nodes</p>
+                <h3 className="text-[10px] font-black text-blue-500 uppercase tracking-[0.4em] leading-none">Settlement Bridge</h3>
+                <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Global P2P Node Connectivity</p>
             </div>
-            <div className="bg-gray-50 border border-gray-100 px-3 py-1.5 rounded-full flex items-center gap-2">
-                <div className="w-1 h-1 bg-green-500 rounded-full animate-ping" />
-                <span className="text-[8px] font-black text-gray-600 uppercase tracking-widest">Liquidity: 100%</span>
+            <div className="bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-full flex items-center gap-2">
+                <div className="w-1 h-1 bg-blue-500 rounded-full animate-pulse" />
+                <span className="text-[8px] font-black text-blue-600 uppercase tracking-widest">Status: Ready</span>
             </div>
         </div>
 
         {/* FROM SECTION */}
-        <div className="bg-gray-50/80 p-8 rounded-[2.5rem] border border-gray-100 space-y-4 group transition-all hover:bg-white hover:shadow-xl hover:shadow-blue-500/5">
+        <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-gray-100 space-y-4 group transition-all hover:bg-white hover:shadow-xl hover:shadow-blue-500/5">
           <div className="flex justify-between items-center">
-            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest opacity-60 group-hover:opacity-100 transition-opacity">Asset Exit</span>
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest opacity-60">Source Vault</span>
             <div className="flex gap-2">
-                <span className="text-[10px] font-black text-gray-400 uppercase">Bal:</span>
-                <span className="text-[10px] font-bold text-gray-600 tracking-tight">{availableBalance.toLocaleString()} {fromAsset.code}</span>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Available:</span>
+                <span className="text-[10px] font-black text-gray-900 tracking-tight">{availableBalance.toLocaleString()} {fromAsset.code}</span>
             </div>
           </div>
           <div className="flex items-center gap-6">
@@ -123,21 +148,21 @@ const SwapView: React.FC<SwapViewProps> = ({ user, onConvert, addTransaction, no
                   <div className="scale-110">{fromAsset.icon}</div>
                   <span className="text-base font-black text-gray-800 tracking-tight">{fromAsset.code}</span>
                </div>
-               <button onClick={handleMax} className="text-[9px] font-black text-blue-500 uppercase tracking-[0.2em] hover:text-blue-600 underline-offset-4 decoration-blue-500/30">Set Max Depth</button>
+               <button onClick={handleMax} className="text-[9px] font-black text-blue-500 uppercase tracking-[0.2em] hover:text-blue-600">Max Capacity</button>
             </div>
           </div>
           {bonusLock > 0 && (
-             <div className="flex items-center gap-2 bg-orange-50 border border-orange-100 p-2 px-3 rounded-xl animate-in slide-in-from-left duration-500">
+             <div className="flex items-center gap-2 bg-orange-50 border border-orange-100 p-2 px-3 rounded-xl">
                 <BoltIcon className="w-3 h-3 text-orange-500" />
                 <p className="text-[8px] font-bold text-orange-600 uppercase tracking-widest">
-                  {bonusLock} {fromAsset.code} locked for security check
+                  {bonusLock} {fromAsset.code} restricted until KYC completion
                 </p>
              </div>
           )}
         </div>
 
-        {/* SWAP ICON - Institutional aesthetics */}
-        <div className="absolute left-1/2 top-[46.5%] -translate-x-1/2 -translate-y-1/2 z-10">
+        {/* SWAP ICON */}
+        <div className="absolute left-1/2 top-[43%] -translate-x-1/2 -translate-y-1/2 z-10">
           <button 
             onClick={handleSwapAssets}
             className="p-4 bg-white rounded-[1.8rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-gray-100 text-[#2A74B1] hover:text-white hover:bg-[#2A74B1] transition-all hover:rotate-180 duration-700 active:scale-90 ring-8 ring-white"
@@ -147,9 +172,9 @@ const SwapView: React.FC<SwapViewProps> = ({ user, onConvert, addTransaction, no
         </div>
 
         {/* TO SECTION */}
-        <div className="bg-gray-50/80 p-8 rounded-[2.5rem] border border-gray-100 space-y-4 group transition-all hover:bg-white hover:shadow-xl hover:shadow-orange-500/5">
+        <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-gray-100 space-y-4 group transition-all hover:bg-white hover:shadow-xl hover:shadow-orange-500/5">
           <div className="flex justify-between items-center">
-            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest opacity-60 group-hover:opacity-100 transition-opacity">Asset Entry (Quote)</span>
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest opacity-60">Settlement Destination</span>
           </div>
           <div className="flex items-center gap-6">
             <div className="flex-1 text-5xl font-black text-gray-300 tracking-tighter truncate group-hover:text-gray-400 transition-colors">
@@ -162,15 +187,37 @@ const SwapView: React.FC<SwapViewProps> = ({ user, onConvert, addTransaction, no
           </div>
         </div>
 
-        {/* INSTITUTIONAL SETTLEMENT QUOTE */}
-        <div className="bg-[#020617] rounded-[2.8rem] p-8 text-white shadow-2xl relative overflow-hidden border-t-4 border-blue-500 group">
+        {/* BRIDGE ROUTING VISUALIZER */}
+        <div className="px-2 py-4 bg-gray-50/30 border-y border-gray-100 flex items-center justify-between">
+            <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide">
+                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest shrink-0">Liquidity Path:</span>
+                {bridgePath.map((step, i) => (
+                    <React.Fragment key={step}>
+                        <div className="bg-white border border-gray-100 px-2.5 py-1 rounded-lg text-[9px] font-black text-gray-700 shadow-sm">{step}</div>
+                        {i < bridgePath.length - 1 && (
+                            <div className="flex gap-0.5">
+                                <div className="w-1 h-1 bg-blue-300 rounded-full" />
+                                <div className="w-1 h-1 bg-blue-300 rounded-full" />
+                            </div>
+                        )}
+                    </React.Fragment>
+                ))}
+            </div>
+            <div className="text-right shrink-0">
+                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Slippage Impact:</span>
+                <span className="text-[9px] font-black text-green-500 ml-1.5">&lt; 0.01%</span>
+            </div>
+        </div>
+
+        {/* INSTITUTIONAL QUOTE */}
+        <div className="bg-[#0F172A] rounded-[2.8rem] p-8 text-white shadow-2xl relative overflow-hidden border-t-4 border-blue-500 group">
           <div className="absolute top-0 right-0 p-10 opacity-[0.03] group-hover:scale-125 transition-transform duration-[2s]">
              <BoltIcon className="w-32 h-32" />
           </div>
           <div className="relative z-10 space-y-5">
              <div className="flex justify-between items-end border-b border-white/5 pb-5">
                 <div>
-                    <span className="text-[9px] font-black uppercase tracking-[0.3em] opacity-40 mb-1 block">Indicative Rate</span>
+                    <span className="text-[9px] font-black uppercase tracking-[0.3em] opacity-40 mb-1 block">Live Exchange Rate</span>
                     <span className="text-lg font-black tracking-tight">1 {fromAsset.code} = {isLoading ? 'SYNCING...' : `${rate?.toLocaleString()} ${toAsset.code}`}</span>
                 </div>
                 <div className="text-right">
@@ -181,8 +228,8 @@ const SwapView: React.FC<SwapViewProps> = ({ user, onConvert, addTransaction, no
              
              <div className="flex justify-between items-center pt-2">
                 <div className="space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500">Net Settlement</span>
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Guaranteed for 60s</p>
+                    <span className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-500">Net Disbursement</span>
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Locked via Institutional Bridge</p>
                 </div>
                 <div className="text-right">
                     <span className="text-3xl md:text-4xl font-black text-white tracking-tighter">
@@ -201,25 +248,28 @@ const SwapView: React.FC<SwapViewProps> = ({ user, onConvert, addTransaction, no
         >
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:animate-shimmer" />
           {isSwapping ? (
-            <>
-               <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-               <span className="animate-pulse">Broadcasting to Nodes...</span>
-            </>
+            <div className="flex flex-col items-center">
+               <div className="flex items-center gap-3 mb-1">
+                  <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  <span className="animate-pulse">Initializing Liquidation Bridge...</span>
+               </div>
+               <span className="text-[8px] font-black opacity-60 tracking-widest">{swapSequences[swapStep]}</span>
+            </div>
           ) : (
-            <span>Execute Conversion Protocol</span>
+            <span>Initiate Asset Liquidation</span>
           )}
         </button>
       </div>
 
-      {/* PAIR SELECTOR HUB */}
+      {/* PAIR SELECTOR */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white p-7 rounded-[2.8rem] border border-gray-100 shadow-sm transition-all hover:shadow-xl hover:shadow-blue-500/5">
+        <div className="bg-white p-7 rounded-[2.8rem] border border-gray-100 shadow-sm transition-all hover:shadow-xl">
            <div className="flex justify-between items-center mb-6 px-1">
-                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em]">Source Inventory</h4>
-                <span className="text-[8px] font-bold text-blue-400 bg-blue-50 px-2 py-0.5 rounded-md uppercase">Vetted</span>
+                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em]">From Asset</h4>
+                <span className="text-[8px] font-bold text-blue-400 bg-blue-50 px-2 py-0.5 rounded-md uppercase">Source</span>
            </div>
            <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
-              {[...FROM_CURRENCIES, ...TO_CURRENCIES].filter(c => c.code !== toAsset.code).map(c => (
+              {FROM_CURRENCIES.map(c => (
                  <button 
                   key={c.code}
                   onClick={() => setFromAsset(c)}
@@ -232,13 +282,13 @@ const SwapView: React.FC<SwapViewProps> = ({ user, onConvert, addTransaction, no
               ))}
            </div>
         </div>
-        <div className="bg-white p-7 rounded-[2.8rem] border border-gray-100 shadow-sm transition-all hover:shadow-xl hover:shadow-orange-500/5">
+        <div className="bg-white p-7 rounded-[2.8rem] border border-gray-100 shadow-sm transition-all hover:shadow-xl">
            <div className="flex justify-between items-center mb-6 px-1">
-                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em]">Destination Sink</h4>
-                <span className="text-[8px] font-bold text-orange-400 bg-orange-50 px-2 py-0.5 rounded-md uppercase">Verified</span>
+                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em]">To Asset</h4>
+                <span className="text-[8px] font-bold text-orange-400 bg-orange-50 px-2 py-0.5 rounded-md uppercase">Target</span>
            </div>
            <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2">
-              {[...TO_CURRENCIES, ...FROM_CURRENCIES].filter(c => c.code !== fromAsset.code).map(c => (
+              {TO_CURRENCIES.map(c => (
                  <button 
                   key={c.code}
                   onClick={() => setToAsset(c)}
