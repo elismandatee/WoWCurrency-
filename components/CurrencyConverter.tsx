@@ -14,37 +14,14 @@ import ProfileView from './ProfileView';
 import WithdrawView from './WithdrawView';
 import TransferView from './TransferView';
 import PrivacyPolicyView from './PrivacyPolicyView';
+import SwapView from './SwapView';
 import BanknotesIcon from './icons/BanknotesIcon';
 import GlobeIcon from './icons/GlobeIcon';
-// Fix: Import missing VerifiedBadgeIcon for the Privacy Policy button
 import VerifiedBadgeIcon from './icons/VerifiedBadgeIcon';
 import ArrowPathIcon from './icons/ArrowPathIcon';
 import BoltIcon from './icons/BoltIcon';
 import ArrowUpRightIcon from './icons/ArrowUpRightIcon';
 import GiftIcon from './icons/GiftIcon';
-
-// --- ICONS ---
-const CopyIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
-  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
-  </svg>
-);
-
-const QrCodeIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
-  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.5A.75.75 0 014.5 3.75h4.5a.75.75 0 01.75.75v4.5a.75.75 0 01-.75.75h-4.5a.75.75 0 01-.75-.75v-4.5zM3.75 15A.75.75 0 014.5 14.25h4.5a.75.75 0 01.75.75v4.5a.75.75 0 01-.75.75h-4.5a.75.75 0 01-.75-.75v-4.5zM15 3.75A.75.75 0 0014.25 3h-4.5a.75.75 0 00-.75.75v4.5a.75.75 0 00.75.75h4.5a.75.75 0 00.75-.75v-4.5zM19.5 19.5a.75.75 0 00.75-.75v-4.5a.75.75 0 00-.75-.75h-4.5a.75.75 0 00-.75.75v4.5a.75.75 0 00.75.75h4.5z" />
-  </svg>
-);
-
-const CheckCircleIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
-  <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-    <path fillRule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.74-5.24z" clipRule="evenodd" />
-  </svg>
-);
-
-const PLATFORM_FEE_RATE = 0.015;
-
-// --- COMPONENTS ---
 
 interface SelectorModalProps<T> {
   isOpen: boolean;
@@ -75,6 +52,25 @@ function SelectorModal<T>({ isOpen, onClose, items, onSelectItem, title, renderI
     </div>
   );
 }
+
+// --- ICONS ---
+const CopyIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
+  </svg>
+);
+
+const QrCodeIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.5A.75.75 0 014.5 3.75h4.5a.75.75 0 01.75.75v4.5a.75.75 0 01-.75.75h-4.5a.75.75 0 01-.75-.75v-4.5zM3.75 15A.75.75 0 014.5 14.25h4.5a.75.75 0 01.75.75v4.5a.75.75 0 01-.75.75h-4.5a.75.75 0 01-.75-.75v-4.5zM15 3.75A.75.75 0 0014.25 3h-4.5a.75.75 0 00-.75.75v4.5a.75.75 0 00.75.75h4.5a.75.75 0 00.75-.75v-4.5zM19.5 19.5a.75.75 0 00.75-.75v-4.5a.75.75 0 00-.75-.75h-4.5a.75.75 0 00-.75.75v4.5a.75.75 0 00.75.75h4.5z" />
+  </svg>
+);
+
+const CheckCircleIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+    <path fillRule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.74-5.24z" clipRule="evenodd" />
+  </svg>
+);
 
 const CardPaymentForm: React.FC<{ 
   onSuccess: (amount: number) => void, 
@@ -436,8 +432,6 @@ const DepositView: React.FC<{ user: User, handleDeposit: (c: string, a: number) 
   );
 };
 
-// --- MAIN COMPONENT ---
-
 interface CurrencyConverterProps {
   user: User;
   allUsers: User[];
@@ -470,15 +464,12 @@ interface CurrencyConverterProps {
   dispatchSms: (message: string) => void;
 }
 
-/**
- * CurrencyConverter component serves as the main hub of the application,
- * managing the different functional views via a tab-based navigation system.
- */
 const CurrencyConverter: React.FC<CurrencyConverterProps> = (props) => {
   const [activeTab, setActiveTab] = useState('wallet');
   
   const tabs = [
     { id: 'wallet', label: 'Wallet', icon: <BanknotesIcon className="w-4 h-4" /> },
+    { id: 'swap', label: 'Swap', icon: <ArrowPathIcon className="w-4 h-4" /> },
     { id: 'deposit', label: 'Deposit', icon: <ArrowPathIcon className="w-4 h-4" /> },
     { id: 'bills', label: 'Bills', icon: <BoltIcon className="w-4 h-4" /> },
     { id: 'withdraw', label: 'Withdraw', icon: <GlobeIcon className="w-4 h-4" /> },
@@ -500,7 +491,6 @@ const CurrencyConverter: React.FC<CurrencyConverterProps> = (props) => {
 
   return (
     <div className="space-y-6">
-      {/* Tab Navigation */}
       <div className="flex overflow-x-auto scrollbar-hide gap-2 p-1 bg-gray-100 rounded-2xl">
         {tabs.map(tab => (
           <button
@@ -514,9 +504,16 @@ const CurrencyConverter: React.FC<CurrencyConverterProps> = (props) => {
         ))}
       </div>
 
-      {/* Main Content Area */}
       <div className="bg-white rounded-[2.5rem] p-6 md:p-8 shadow-sm border border-gray-100 min-h-[400px]">
         {activeTab === 'wallet' && <WalletSummary user={props.user} marketRates={props.marketRates} />}
+        {activeTab === 'swap' && (
+          <SwapView 
+            user={props.user} 
+            onConvert={props.handleCompleteConversion} 
+            addTransaction={props.addTransaction}
+            notify={props.notify} 
+          />
+        )}
         {activeTab === 'deposit' && <DepositView user={props.user} handleDeposit={props.handleDeposit} />}
         {activeTab === 'bills' && (
           <BillsView 
@@ -573,7 +570,6 @@ const CurrencyConverter: React.FC<CurrencyConverterProps> = (props) => {
         {activeTab === 'privacy' && <PrivacyPolicyView />}
       </div>
 
-      {/* Footer Settings Navigation */}
       <div className="flex flex-wrap justify-center gap-4 pt-4">
         {settingsTabs.map(tab => (
           <button

@@ -5,6 +5,7 @@ import { ALL_CURRENCIES, TO_CURRENCIES } from '../constants';
 import { BatchRate } from '../services/conversionService';
 import VerifiedBadgeIcon from './icons/VerifiedBadgeIcon';
 import GlobeIcon from './icons/GlobeIcon';
+import MarketChart from './MarketChart';
 
 interface WalletSummaryProps {
   user: User;
@@ -16,7 +17,10 @@ const WalletSummary: React.FC<WalletSummaryProps> = ({ user, marketRates }) => {
   const isVerified = kycStatus === 'verified';
   const isBonusUnlocked = isVerified && totalDepositedUsd >= 5;
   const [totalValue, setTotalValue] = useState<number>(0);
-  const [showUnlockGuide, setShowUnlockGuide] = useState(false);
+
+  // Mock data for charts
+  const piChartData = [51.2, 52.4, 50.8, 53.5, 55.2, 54.1, 56.4];
+  const btcChartData = [94000, 95500, 96200, 95800, 97000, 96500, 98200];
 
   const localCurrency = useMemo(() => {
     const region = profile?.region || 'Africa';
@@ -59,16 +63,17 @@ const WalletSummary: React.FC<WalletSummaryProps> = ({ user, marketRates }) => {
         <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-orange-500/10 rounded-full blur-3xl" />
         
         <div className="relative z-10">
-          <div className="flex justify-between items-start mb-4">
+          <div className="flex justify-between items-start mb-6">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
-                <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-400">Net Portfolio Value</h2>
+                <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-400">Total Portfolio Balance</h2>
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-4xl font-black tracking-tighter">
+                <span className="text-4xl md:text-5xl font-extrabold tracking-tighter">
                   {localCurrency.symbol}{totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
+                <span className="text-xs font-bold text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full">+2.4%</span>
               </div>
             </div>
             <div className="bg-white/5 backdrop-blur-md border border-white/10 p-2.5 rounded-2xl">
@@ -77,40 +82,75 @@ const WalletSummary: React.FC<WalletSummaryProps> = ({ user, marketRates }) => {
           </div>
           
           <div className="flex gap-4">
-            <div className="bg-white/5 border border-white/10 px-4 py-2 rounded-2xl">
-              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Region</p>
-              <p className="text-[11px] font-bold text-white uppercase">{profile?.region || 'Global Hub'}</p>
+            <div className="bg-white/5 border border-white/10 px-4 py-2 rounded-2xl backdrop-blur-sm">
+              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Node Location</p>
+              <p className="text-[11px] font-bold text-white uppercase">{profile?.region || 'Global Gateway'}</p>
             </div>
-            <div className="bg-white/5 border border-white/10 px-4 py-2 rounded-2xl">
-              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Safety Index</p>
-              <p className="text-[11px] font-bold text-white uppercase">99.2% SECURE</p>
+            <div className="bg-white/5 border border-white/10 px-4 py-2 rounded-2xl backdrop-blur-sm">
+              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Trust Score</p>
+              <p className="text-[11px] font-bold text-blue-400 uppercase">AA+ SECURED</p>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-white border border-gray-100 rounded-[2rem] p-6 shadow-sm flex flex-col justify-between group overflow-hidden relative">
+          <div className="relative z-10">
+             <div className="flex justify-between items-start mb-2">
+                <div>
+                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Pi Price Trend</p>
+                   <p className="text-xl font-black text-gray-900">$54.10 <span className="text-[10px] text-green-500">+12%</span></p>
+                </div>
+                <div className="bg-orange-50 p-2 rounded-xl text-orange-500">
+                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" /></svg>
+                </div>
+             </div>
+          </div>
+          <div className="mt-4 -mx-6 -mb-6 opacity-40 group-hover:opacity-100 transition-opacity duration-500">
+             <MarketChart data={piChartData} color="#F58220" />
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-100 rounded-[2rem] p-6 shadow-sm flex flex-col justify-between group overflow-hidden relative">
+          <div className="relative z-10">
+             <div className="flex justify-between items-start mb-2">
+                <div>
+                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">BTC Market Signal</p>
+                   <p className="text-xl font-black text-gray-900">$96.5k <span className="text-[10px] text-red-500">-0.4%</span></p>
+                </div>
+                <div className="bg-blue-50 p-2 rounded-xl text-blue-500">
+                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                </div>
+             </div>
+          </div>
+          <div className="mt-4 -mx-6 -mb-6 opacity-40 group-hover:opacity-100 transition-opacity duration-500">
+             <MarketChart data={btcChartData} color="#2A74B1" />
           </div>
         </div>
       </div>
 
       {lockedAssets.length > 0 && (
           <div className="bg-red-50 border border-red-100 p-5 rounded-[2rem] flex items-center gap-3 animate-pulse">
-              <div className="bg-red-500 text-white p-2 rounded-xl">
+              <div className="bg-red-500 text-white p-2 rounded-xl shadow-lg">
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 15v2m0 0v2m0-2h2m-2 0H8m13 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
               </div>
               <div>
-                  <p className="text-[10px] font-black text-red-900 uppercase tracking-widest leading-none mb-1">Account Restricted</p>
-                  <p className="text-[9px] text-red-600 font-bold uppercase tracking-widest opacity-70">Some assets are frozen for security review.</p>
+                  <p className="text-[10px] font-black text-red-900 uppercase tracking-widest leading-none mb-1">Node Restricted</p>
+                  <p className="text-[9px] text-red-600 font-bold uppercase tracking-widest opacity-70">Regulatory lock active on specific currency bridges.</p>
               </div>
           </div>
       )}
 
-      {/* Asset Breakdown */}
       <div>
         <div className="flex justify-between items-center mb-4 px-2">
-          <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Asset Breakdown</h3>
+          <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Asset Allocation</h3>
           {isVerified && (
-            <div className="flex items-center gap-1 text-[8px] font-black text-green-500 uppercase tracking-widest bg-green-500/5 px-2 py-1 rounded-full border border-green-500/20">
+            <div className="flex items-center gap-1 text-[8px] font-black text-green-500 uppercase tracking-widest bg-green-500/5 px-2 py-1 rounded-full border border-green-500/20 shadow-sm">
               <VerifiedBadgeIcon className="w-3 h-3" />
-              KYC Compliant
+              Mainnet Ready
             </div>
           )}
         </div>
@@ -124,19 +164,19 @@ const WalletSummary: React.FC<WalletSummaryProps> = ({ user, marketRates }) => {
             return (
               <div 
                 key={currency.code} 
-                className="flex-shrink-0 w-36 bg-white border border-gray-100 rounded-[1.8rem] p-5 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group cursor-default relative overflow-hidden"
+                className="flex-shrink-0 w-36 bg-white border border-gray-100 rounded-[2.2rem] p-5 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group cursor-default relative overflow-hidden border-b-4 border-b-transparent hover:border-b-blue-500"
               >
                 {isLockedAsset && (
                     <div className="absolute top-0 right-0 p-2">
-                         <div className={`${isRestricted ? 'bg-orange-500' : 'bg-blue-500'} text-white p-1 rounded-md shadow-lg animate-pulse`} title={isRestricted ? "Frozen by Admin" : "Requirement Check"}>
+                         <div className={`${isRestricted ? 'bg-orange-500' : 'bg-blue-500'} text-white p-1 rounded-md shadow-lg animate-pulse`} title={isRestricted ? "Security Freeze" : "KYC Requirement"}>
                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                              </svg>
                          </div>
                     </div>
                 )}
-                <div className="flex items-center mb-3">
-                  <div className="scale-90 group-hover:scale-100 transition-transform duration-500">
+                <div className="flex items-center mb-4">
+                  <div className="scale-90 group-hover:scale-110 transition-transform duration-500 bg-slate-50 p-2 rounded-xl group-hover:bg-blue-50">
                     {currency.icon}
                   </div>
                   <span className="ml-2.5 font-black text-gray-900 text-xs tracking-tight">{currency.code}</span>
@@ -147,24 +187,29 @@ const WalletSummary: React.FC<WalletSummaryProps> = ({ user, marketRates }) => {
                     minimumFractionDigits: currency.isCrypto ? 0 : 2
                   })}
                 </p>
-                <div className="w-8 h-1 bg-gray-50 rounded-full mt-3 group-hover:w-full transition-all duration-700 bg-gradient-to-r from-blue-500 to-transparent opacity-20" />
+                <div className="w-6 h-0.5 bg-gray-100 rounded-full mt-3 group-hover:w-full transition-all duration-700 bg-gradient-to-r from-blue-500 to-transparent" />
               </div>
             );
           })}
         </div>
       </div>
 
-      {/* Mandatory Risk Warning for Google Play Store Financial Policy */}
-      <div className="bg-gray-50 p-5 rounded-[2rem] border border-gray-100 border-dashed">
-          <div className="flex items-start gap-3">
-              <div className="bg-gray-200 p-1.5 rounded-lg text-gray-500">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      <div className="bg-gray-900 p-6 rounded-[2.5rem] border border-white/5 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-6 opacity-10">
+             <svg className="w-16 h-16 text-blue-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+          </div>
+          <div className="flex items-start gap-4">
+              <div className="bg-blue-500/10 p-2 rounded-xl text-blue-400">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
               </div>
-              <p className="text-[9px] font-bold text-gray-400 leading-relaxed uppercase tracking-tight">
-                <span className="text-gray-900 font-black">Financial Disclosure:</span> Conversion of digital assets involves significant market risk. WoWCurrency is not a bank. Rates are dynamic based on live market liquidity. Always verify recipient details before authorizing high-speed settlement.
-              </p>
+              <div className="space-y-1">
+                 <p className="text-[11px] font-black text-white uppercase tracking-widest">Ecosystem Transparency</p>
+                 <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
+                   WoWCurrency operates on real-time market liquidity bridges. Conversion rates for Pi Network are based on live IOU settlements. Commission is fixed at 1.5%.
+                 </p>
+              </div>
           </div>
       </div>
     </div>

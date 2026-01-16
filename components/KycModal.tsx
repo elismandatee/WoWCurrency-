@@ -1,14 +1,16 @@
 
 import React, { useState } from 'react';
-import type { KycData, Region } from '../types';
+import type { KycData, Region, User } from '../types';
 
 interface KycModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: KycData) => void;
+  users?: User[]; // Prop to enable cross-user duplicate check
+  currentUserId?: string; // Prop to exclude current user from duplicate check
 }
 
-const KycModal: React.FC<KycModalProps> = ({ isOpen, onClose, onSubmit }) => {
+const KycModal: React.FC<KycModalProps> = ({ isOpen, onClose, onSubmit, users = [], currentUserId }) => {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState<Omit<KycData, 'idDocument'>>({
     fullName: '',
@@ -24,10 +26,12 @@ const KycModal: React.FC<KycModalProps> = ({ isOpen, onClose, onSubmit }) => {
   const [fileName, setFileName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [consentGiven, setConsentGiven] = useState(false);
+  const [error, setError] = useState('');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value as any }));
+    setError(''); // Clear error on change
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -35,6 +39,7 @@ const KycModal: React.FC<KycModalProps> = ({ isOpen, onClose, onSubmit }) => {
       const file = e.target.files[0];
       setFileObject(file);
       setFileName(file.name);
+      setError('');
     }
   };
 
@@ -43,10 +48,36 @@ const KycModal: React.FC<KycModalProps> = ({ isOpen, onClose, onSubmit }) => {
     if (!fileObject || !consentGiven) return;
 
     setIsLoading(true);
+    setError('');
+    
     const reader = new FileReader();
     reader.onloadend = async () => {
         const base64String = reader.result as string;
-        // Simulate high-security identity hashing
+
+        // --- GLOBAL DUPLICATE DETECTION PROTOCOL ---
+        const duplicateUser = users.find(u => {
+            // Skip checking against own account node
+            if (u.id === currentUserId) return false;
+            
+            const profile = u.profile;
+            if (!profile) return false;
+
+            // Check for matching ID Number OR matching document binary (base64)
+            const idMatch = profile.idNumber && profile.idNumber.toLowerCase() === formData.idNumber.toLowerCase();
+            const docMatch = profile.idDocument === base64String;
+
+            return idMatch || docMatch;
+        });
+
+        if (duplicateUser) {
+            const conflictMsg = "The information provided has been used with another user.";
+            window.alert(`SECURITY CONFLICT: ${conflictMsg}`);
+            setError(`ACCESS REJECTED: ${conflictMsg}`);
+            setIsLoading(false);
+            return;
+        }
+
+        // Simulate secure identity hashing/syncing with WoW ecosystem
         await new Promise(resolve => setTimeout(resolve, 3000));
         onSubmit({ ...formData, idDocument: base64String });
         setIsLoading(false);
@@ -60,7 +91,7 @@ const KycModal: React.FC<KycModalProps> = ({ isOpen, onClose, onSubmit }) => {
     <div className="fixed inset-0 bg-[#020203]/98 backdrop-blur-3xl z-[300] flex items-center justify-center p-4 overflow-y-auto selection:bg-blue-600 selection:text-white" onClick={onClose}>
       <div className="bg-[#0A0A0B] rounded-[3.5rem] shadow-[0_50px_120px_rgba(0,0,0,1)] w-full max-w-xl overflow-hidden border border-white/[0.03] ring-1 ring-white/5" onClick={(e) => e.stopPropagation()}>
         
-        {/* Header - Ghosted Typography */}
+        {/* Header - Identity Layer */}
         <div className="p-10 pb-6 border-b border-white/[0.03] relative overflow-hidden bg-[#101012]">
           <div className="absolute top-0 right-0 p-8 opacity-[0.02]">
               <svg className="w-40 h-40" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h-2v-6h2v6zm0-8h-2V7h2v2z" /></svg>
@@ -87,6 +118,20 @@ const KycModal: React.FC<KycModalProps> = ({ isOpen, onClose, onSubmit }) => {
 
         <form onSubmit={handleSubmit} className="p-10 pt-10 space-y-10">
           
+          {error && (
+            <div className="p-6 bg-red-600/10 border border-red-600/40 rounded-[2rem] animate-shake">
+                <div className="flex items-start gap-4 text-red-500">
+                    <div className="bg-red-500 p-2 rounded-xl text-white shadow-lg">
+                      <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-black uppercase tracking-widest leading-none mb-2">Security Conflict Detected</p>
+                      <p className="text-[10px] font-bold uppercase tracking-tight text-red-400 opacity-80 leading-relaxed">{error}</p>
+                    </div>
+                </div>
+            </div>
+          )}
+
           {step === 1 && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-8 duration-500">
               <div className="space-y-2 group">
@@ -147,6 +192,19 @@ const KycModal: React.FC<KycModalProps> = ({ isOpen, onClose, onSubmit }) => {
                     <option value="drivers-license" className="bg-[#0A0A0B]">Driver's License</option>
                     <option value="passport" className="bg-[#0A0A0B]">International Passport</option>
                 </select>
+              </div>
+
+              <div className="space-y-2 group">
+                <label className="block text-[9px] font-black text-white/10 uppercase tracking-widest ml-4 group-focus-within:text-blue-500/50 transition-colors">Document Serial ID</label>
+                <input 
+                    type="text" 
+                    name="idNumber" 
+                    value={formData.idNumber} 
+                    onChange={handleChange} 
+                    required 
+                    placeholder="Enter ID Serial Number"
+                    className="w-full px-7 py-6 bg-white/[0.02] border border-white/[0.03] rounded-[2rem] text-sm font-black text-white placeholder:text-white/5 focus:ring-1 focus:ring-blue-500/20 focus:border-blue-500/40 focus:bg-white/[0.04] outline-none transition-all" 
+                />
               </div>
 
               <div className="space-y-4">
@@ -226,6 +284,17 @@ const KycModal: React.FC<KycModalProps> = ({ isOpen, onClose, onSubmit }) => {
           </div>
         </form>
       </div>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-4px); }
+          75% { transform: translateX(4px); }
+        }
+        .animate-shake {
+          animation: shake 0.2s ease-in-out 3;
+        }
+      `}} />
     </div>
   );
 };
